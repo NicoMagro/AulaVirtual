@@ -152,6 +152,8 @@ graph LR
         A3[Eliminar Aulas]
         A4[Asignar Profesores]
         A5[Ver Todas las Aulas]
+        A6[Gestionar Usuarios]
+        A7[Asignar/Quitar Roles]
     end
 
     subgraph "Funcionalidades Profesor"
@@ -168,9 +170,13 @@ graph LR
         E4[Desmatricularse]
     end
 
-    A --> A1 & A2 & A3 & A4 & A5
+    A --> A1 & A2 & A3 & A4 & A5 & A6 & A7
     P --> P1 & P2 & P3 & P4
     E --> E1 & E2 & E3 & E4
+
+    Note right of A: Puede tener múltiples roles
+    Note right of P: Puede tener múltiples roles
+    Note right of E: Puede tener múltiples roles
 ```
 
 ## Tecnologías
@@ -226,8 +232,13 @@ AulaVirtual/
 │   │   │   └── AuthContext.jsx
 │   │   ├── pages/            # Páginas de la aplicación
 │   │   │   ├── admin/        # Páginas de admin
+│   │   │   │   ├── GestionAulas.jsx
+│   │   │   │   └── GestionUsuarios.jsx
 │   │   │   ├── profesor/     # Páginas de profesor
+│   │   │   │   └── MisAulas.jsx
 │   │   │   ├── estudiante/   # Páginas de estudiante
+│   │   │   │   ├── ExplorarAulas.jsx
+│   │   │   │   └── MisAulas.jsx
 │   │   │   ├── Login.jsx
 │   │   │   ├── Registro.jsx
 │   │   │   └── Dashboard.jsx
@@ -361,6 +372,8 @@ npm run preview
 - ✅ Tokens JWT
 - ✅ Protección de rutas
 - ✅ Roles de usuario (estudiante, profesor, administrador)
+- ✅ Usuarios con múltiples roles
+- ✅ Selector de rol activo para usuarios con múltiples roles
 - ✅ Context API para gestión de estado de autenticación
 
 ### Gestión de Aulas (Administrador)
@@ -370,6 +383,13 @@ npm run preview
 - ✅ Asignar profesores a aulas
 - ✅ Desasignar profesores de aulas
 - ✅ Ver lista completa de aulas del sistema
+
+### Gestión de Usuarios (Administrador)
+- ✅ Ver todos los usuarios del sistema con sus roles
+- ✅ Agregar roles a usuarios
+- ✅ Quitar roles de usuarios
+- ✅ Protección: usuarios deben mantener al menos un rol
+- ✅ Visualización de roles con códigos de color
 
 ### Funcionalidades del Profesor
 - ✅ Ver aulas asignadas
@@ -471,19 +491,73 @@ Requieren header: `Authorization: Bearer <token>` y rol **estudiante**
 - Desmatricularse de un aula
 - Respuesta: `{ success, message }`
 
-### Usuarios
+### Usuarios (Admin)
 
-Requieren header: `Authorization: Bearer <token>`
+Requieren header: `Authorization: Bearer <token>` y rol **admin**
 
-**GET** `/api/usuarios/profesores`
-- Lista todos los profesores (para asignación)
-- Respuesta: `{ success, data: [...profesores], total }`
+**GET** `/api/usuarios`
+- Obtener todos los usuarios del sistema con sus roles
+- Respuesta: `{ success, data: [...usuarios], total }`
 
-## Roles
+**GET** `/api/usuarios/roles`
+- Obtener todos los roles disponibles del sistema
+- Respuesta: `{ success, data: [...roles], total }`
 
-- **estudiante**: Rol por defecto al registrarse
-- **profesor**: Puede gestionar cursos y estudiantes
-- **administrador**: Acceso completo al sistema
+**GET** `/api/usuarios/por-rol`
+- Listar usuarios filtrados por rol
+- Query params: `rol` (admin/profesor/estudiante), `busqueda` (opcional)
+- Respuesta: `{ success, data: [...usuarios], total }`
+
+**POST** `/api/usuarios/agregar-rol`
+- Agregar un rol a un usuario
+- Body: `{ usuario_id, rol_id }`
+- Respuesta: `{ success, message }`
+
+**DELETE** `/api/usuarios/:usuario_id/roles/:rol_id`
+- Quitar un rol de un usuario (requiere tener mínimo 2 roles)
+- Respuesta: `{ success, message }`
+
+## Roles y Múltiples Roles
+
+### Roles Disponibles
+
+- **estudiante**: Rol por defecto al registrarse. Puede explorar aulas, matricularse y desmatricularse
+- **profesor**: Puede gestionar aulas asignadas, ver estudiantes y gestionar claves de matriculación
+- **admin**: Acceso completo al sistema, gestión de aulas, usuarios y asignación de roles
+
+### Sistema de Múltiples Roles
+
+Los usuarios pueden tener múltiples roles asignados. Esto permite flexibilidad en el uso del sistema:
+
+**Características:**
+- Un usuario puede tener uno o más roles (admin, profesor, estudiante)
+- Los usuarios con múltiples roles pueden cambiar entre ellos usando el selector en el navbar
+- El rol activo determina qué funcionalidades y rutas están disponibles
+- El rol activo se persiste en localStorage para mantener la selección entre sesiones
+
+**Selector de Roles:**
+- Aparece en la parte superior derecha del navbar (solo para usuarios con múltiples roles)
+- Muestra todos los roles disponibles como badges con colores:
+  - Admin: Rojo
+  - Profesor: Azul
+  - Estudiante: Verde
+- El rol activo se destaca con un anillo
+- Al cambiar de rol, la interfaz se actualiza automáticamente
+
+**Caso de Uso:**
+Un profesor puede tener también el rol de estudiante para:
+1. Crear y configurar un aula como profesor
+2. Cambiar al rol de estudiante para ver cómo se visualiza el aula desde la perspectiva del estudiante
+3. Probar el proceso de matriculación
+4. Verificar que todo funcione correctamente antes de compartir el aula
+
+### Gestión de Roles (Admin)
+
+El administrador puede:
+- Ver todos los usuarios con sus roles actuales
+- Agregar roles adicionales a cualquier usuario
+- Quitar roles de usuarios (manteniendo mínimo 1 rol)
+- Los cambios son inmediatos y no requieren que el usuario cierre sesión
 
 ## Autor
 

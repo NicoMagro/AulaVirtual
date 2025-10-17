@@ -1,9 +1,9 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, NavLink } from 'react-router-dom';
-import { LogOut, School, BookOpen, Users, Home } from 'lucide-react';
+import { LogOut, School, BookOpen, Users, Home, RefreshCw, Shield } from 'lucide-react';
 
 const Layout = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user, rolActivo, tieneMultiplesRoles, cambiarRol, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -11,14 +11,19 @@ const Layout = ({ children }) => {
     navigate('/login');
   };
 
-  const getNavLinks = () => {
-    const role = user?.roles?.[0];
+  const handleCambiarRol = (nuevoRol) => {
+    cambiarRol(nuevoRol);
+    // Redirigir al dashboard cuando cambie de rol
+    navigate('/dashboard');
+  };
 
-    switch (role) {
+  const getNavLinks = () => {
+    switch (rolActivo) {
       case 'admin':
         return [
           { to: '/dashboard', icon: Home, label: 'Inicio' },
           { to: '/admin/aulas', icon: School, label: 'Gestión de Aulas' },
+          { to: '/admin/usuarios', icon: Users, label: 'Gestión de Usuarios' },
         ];
       case 'profesor':
         return [
@@ -33,6 +38,19 @@ const Layout = ({ children }) => {
         ];
       default:
         return [];
+    }
+  };
+
+  const getRolColor = (rol) => {
+    switch (rol) {
+      case 'admin':
+        return 'bg-red-100 text-red-800 border-red-300';
+      case 'profesor':
+        return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'estudiante':
+        return 'bg-green-100 text-green-800 border-green-300';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-300';
     }
   };
 
@@ -65,12 +83,40 @@ const Layout = ({ children }) => {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Selector de rol (solo si tiene múltiples roles) */}
+              {tieneMultiplesRoles && user?.roles && (
+                <div className="hidden sm:flex items-center gap-2 border-r pr-4">
+                  <RefreshCw size={16} className="text-gray-500" />
+                  <div className="flex gap-2">
+                    {user.roles.map((rol) => (
+                      <button
+                        key={rol}
+                        onClick={() => handleCambiarRol(rol)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                          rolActivo === rol
+                            ? getRolColor(rol) + ' ring-2 ring-offset-1 ring-primary-500'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                        title={`Cambiar a rol ${rol}`}
+                      >
+                        {rol}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Información del usuario */}
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-gray-900">
                   {user?.nombre} {user?.apellido}
                 </p>
-                <p className="text-xs text-gray-600">{user?.roles?.[0]}</p>
+                <p className="text-xs text-gray-600 flex items-center justify-end gap-1">
+                  <Shield size={12} />
+                  {rolActivo}
+                </p>
               </div>
+
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
@@ -84,6 +130,29 @@ const Layout = ({ children }) => {
 
         {/* Mobile menu */}
         <div className="md:hidden border-t border-gray-200 px-4 py-3">
+          {/* Selector de rol móvil */}
+          {tieneMultiplesRoles && user?.roles && (
+            <div className="mb-3 pb-3 border-b">
+              <p className="text-xs text-gray-500 mb-2">Cambiar rol:</p>
+              <div className="flex flex-wrap gap-2">
+                {user.roles.map((rol) => (
+                  <button
+                    key={rol}
+                    onClick={() => handleCambiarRol(rol)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                      rolActivo === rol
+                        ? getRolColor(rol) + ' ring-2 ring-offset-1 ring-primary-500'
+                        : 'bg-white text-gray-600 border-gray-300'
+                    }`}
+                  >
+                    {rol}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Links de navegación móvil */}
           <div className="space-y-1">
             {navLinks.map((link) => (
               <NavLink

@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 
 // Admin
 import GestionAulas from './pages/admin/GestionAulas';
+import GestionUsuarios from './pages/admin/GestionUsuarios';
 
 // Profesor
 import MisAulasProfesor from './pages/profesor/MisAulas';
@@ -43,6 +44,16 @@ function App() {
               <ProtectedRoute rolesPermitidos={['admin']}>
                 <Layout>
                   <GestionAulas />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/usuarios"
+            element={
+              <ProtectedRoute rolesPermitidos={['admin']}>
+                <Layout>
+                  <GestionUsuarios />
                 </Layout>
               </ProtectedRoute>
             }
