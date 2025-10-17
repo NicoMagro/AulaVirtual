@@ -139,7 +139,7 @@ sequenceDiagram
 ## Roles y Permisos
 
 ```mermaid
-graph LR
+graph TB
     subgraph "Roles del Sistema"
         A[Admin]
         P[Profesor]
@@ -174,9 +174,8 @@ graph LR
     P --> P1 & P2 & P3 & P4
     E --> E1 & E2 & E3 & E4
 
-    Note right of A: Puede tener múltiples roles
-    Note right of P: Puede tener múltiples roles
-    Note right of E: Puede tener múltiples roles
+    MR[Los usuarios pueden tener múltiples roles<br/>y cambiar entre ellos]
+    style MR fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
 ```
 
 ## Tecnologías
