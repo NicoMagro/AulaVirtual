@@ -1,8 +1,8 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+const ProtectedRoute = ({ children, rolesPermitidos = [] }) => {
+  const { isAuthenticated, loading, user } = useAuth();
 
   if (loading) {
     return (
@@ -14,6 +14,16 @@ const ProtectedRoute = ({ children }) => {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Si se especificaron roles permitidos, verificar que el usuario tenga alguno
+  if (rolesPermitidos.length > 0) {
+    const tieneRolPermitido = user?.roles?.some((rol) => rolesPermitidos.includes(rol));
+
+    if (!tieneRolPermitido) {
+      // Redirigir al dashboard si no tiene el rol necesario
+      return <Navigate to="/dashboard" replace />;
+    }
   }
 
   return children;

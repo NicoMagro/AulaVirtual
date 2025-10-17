@@ -2,6 +2,177 @@
 
 Sistema de gestión de aula virtual con autenticación de usuarios, roles y permisos.
 
+## Arquitectura del Sistema
+
+```mermaid
+graph TB
+    subgraph "Frontend - React"
+        A[Components]
+        B[Pages]
+        C[Services/API]
+        D[Context/Auth]
+    end
+
+    subgraph "Backend - Node.js/Express"
+        E[Routes]
+        F[Controllers]
+        G[Middlewares]
+        H[Utils]
+    end
+
+    subgraph "Base de Datos - PostgreSQL"
+        I[(usuarios)]
+        J[(roles)]
+        K[(aulas)]
+        L[(aula_profesores)]
+        M[(aula_estudiantes)]
+    end
+
+    A --> C
+    B --> C
+    C --> |HTTP/REST| E
+    D --> |JWT Token| E
+    E --> G
+    G --> F
+    F --> I
+    F --> J
+    F --> K
+    F --> L
+    F --> M
+    H -.-> G
+```
+
+## Modelo de Datos
+
+```mermaid
+erDiagram
+    usuarios ||--o{ usuario_roles : tiene
+    roles ||--o{ usuario_roles : asigna
+    usuarios ||--o{ aulas : crea
+    usuarios ||--o{ aula_profesores : asignado_como
+    usuarios ||--o{ aula_estudiantes : matriculado_como
+    aulas ||--o{ aula_profesores : tiene
+    aulas ||--o{ aula_estudiantes : tiene
+
+    usuarios {
+        uuid id PK
+        varchar nombre
+        varchar apellido
+        varchar email UK
+        varchar password_hash
+        boolean activo
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
+    }
+
+    roles {
+        serial id PK
+        varchar nombre UK
+        text descripcion
+        timestamp fecha_creacion
+    }
+
+    usuario_roles {
+        uuid usuario_id FK
+        int rol_id FK
+        timestamp asignado_en
+    }
+
+    aulas {
+        uuid id PK
+        varchar nombre UK
+        text descripcion
+        int capacidad_maxima
+        varchar clave_matriculacion
+        boolean activo
+        uuid creado_por FK
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
+    }
+
+    aula_profesores {
+        uuid aula_id FK
+        uuid profesor_id FK
+        uuid asignado_por FK
+        timestamp asignado_en
+        boolean activo
+    }
+
+    aula_estudiantes {
+        uuid aula_id FK
+        uuid estudiante_id FK
+        timestamp fecha_matriculacion
+        boolean activo
+    }
+```
+
+## Flujo de Autenticación
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant F as Frontend
+    participant B as Backend
+    participant DB as Database
+
+    U->>F: Ingresa credenciales
+    F->>B: POST /api/auth/login
+    B->>DB: Buscar usuario por email
+    DB-->>B: Datos del usuario
+    B->>B: Verificar contraseña (bcrypt)
+    B->>B: Generar JWT Token
+    B-->>F: Token + datos usuario
+    F->>F: Guardar token en localStorage
+    F->>F: Actualizar AuthContext
+    F-->>U: Redirigir a Dashboard
+
+    Note over F,B: Siguientes peticiones incluyen token
+
+    F->>B: GET /api/... (Header: Authorization)
+    B->>B: Verificar JWT Token
+    B->>B: Verificar roles
+    B->>DB: Consultar datos
+    DB-->>B: Datos solicitados
+    B-->>F: Respuesta
+```
+
+## Roles y Permisos
+
+```mermaid
+graph LR
+    subgraph "Roles del Sistema"
+        A[Admin]
+        P[Profesor]
+        E[Estudiante]
+    end
+
+    subgraph "Funcionalidades Admin"
+        A1[Crear Aulas]
+        A2[Editar Aulas]
+        A3[Eliminar Aulas]
+        A4[Asignar Profesores]
+        A5[Ver Todas las Aulas]
+    end
+
+    subgraph "Funcionalidades Profesor"
+        P1[Ver Mis Aulas]
+        P2[Gestionar Clave Matriculación]
+        P3[Ver Estudiantes]
+        P4[Gestionar Contenidos]
+    end
+
+    subgraph "Funcionalidades Estudiante"
+        E1[Explorar Aulas]
+        E2[Matricularse]
+        E3[Ver Mis Aulas]
+        E4[Desmatricularse]
+    end
+
+    A --> A1 & A2 & A3 & A4 & A5
+    P --> P1 & P2 & P3 & P4
+    E --> E1 & E2 & E3 & E4
+```
+
 ## Tecnologías
 
 ### Backend
@@ -14,9 +185,10 @@ Sistema de gestión de aula virtual con autenticación de usuarios, roles y perm
 ### Frontend
 - React 19
 - Vite
-- React Router DOM
+- React Router DOM v7
 - Axios
-- Tailwind CSS
+- Tailwind CSS v3
+- Lucide React (iconos)
 
 ## Estructura del Proyecto
 
@@ -24,22 +196,53 @@ Sistema de gestión de aula virtual con autenticación de usuarios, roles y perm
 AulaVirtual/
 ├── backend/          # API REST con Node.js
 │   ├── src/
-│   │   ├── config/      # Configuración de la base de datos
-│   │   ├── controllers/ # Controladores
-│   │   ├── middlewares/ # Middleware de autenticación
-│   │   ├── routes/      # Rutas de la API
-│   │   ├── utils/       # Utilidades (JWT, etc.)
-│   │   └── index.js     # Punto de entrada
+│   │   ├── config/           # Configuración de la base de datos
+│   │   ├── controllers/      # Controladores de lógica de negocio
+│   │   │   ├── authController.js
+│   │   │   ├── aulasController.js
+│   │   │   ├── matriculacionController.js
+│   │   │   └── usuariosController.js
+│   │   ├── middlewares/      # Middleware de autenticación y autorización
+│   │   │   └── auth.js
+│   │   ├── routes/           # Definición de rutas de la API
+│   │   │   ├── authRoutes.js
+│   │   │   ├── aulasRoutes.js
+│   │   │   ├── matriculacionRoutes.js
+│   │   │   └── usuariosRoutes.js
+│   │   ├── utils/            # Utilidades (JWT, etc.)
+│   │   │   └── jwt.js
+│   │   └── index.js          # Punto de entrada del servidor
 │   └── package.json
 │
-└── frontend/         # Aplicación React
-    ├── src/
-    │   ├── components/  # Componentes reutilizables
-    │   ├── contexts/    # Context API (autenticación)
-    │   ├── pages/       # Páginas (Login, Registro, Dashboard)
-    │   ├── services/    # Servicios API
-    │   └── App.jsx
-    └── package.json
+├── frontend/         # Aplicación React
+│   ├── src/
+│   │   ├── components/       # Componentes reutilizables
+│   │   │   ├── admin/        # Componentes específicos de admin
+│   │   │   ├── profesor/     # Componentes específicos de profesor
+│   │   │   ├── estudiante/   # Componentes específicos de estudiante
+│   │   │   ├── Layout.jsx
+│   │   │   └── ProtectedRoute.jsx
+│   │   ├── contexts/         # Context API (autenticación)
+│   │   │   └── AuthContext.jsx
+│   │   ├── pages/            # Páginas de la aplicación
+│   │   │   ├── admin/        # Páginas de admin
+│   │   │   ├── profesor/     # Páginas de profesor
+│   │   │   ├── estudiante/   # Páginas de estudiante
+│   │   │   ├── Login.jsx
+│   │   │   ├── Registro.jsx
+│   │   │   └── Dashboard.jsx
+│   │   ├── services/         # Servicios de API
+│   │   │   ├── api.js
+│   │   │   ├── authService.js
+│   │   │   ├── aulasService.js
+│   │   │   ├── matriculacionService.js
+│   │   │   └── usuariosService.js
+│   │   └── App.jsx
+│   └── package.json
+│
+└── context/          # Scripts y contexto de base de datos
+    ├── init.sql              # Script de inicialización de BD
+    └── usuarios_prueba.sql   # Script de usuarios de prueba
 ```
 
 ## Requisitos Previos
@@ -52,11 +255,37 @@ AulaVirtual/
 
 ### 1. Base de Datos
 
-Crea una base de datos PostgreSQL llamada `AulaVirtual` y ejecuta el script SQL ubicado en `backend/database/schema.sql` (si existe) o crea las siguientes tablas:
+Crea una base de datos PostgreSQL llamada `AulaVirtual` y ejecuta los siguientes scripts:
 
-```sql
--- Ver script completo en la documentación de la base de datos
+```bash
+# 1. Ejecuta el script de inicialización de base de datos
+psql -U tu_usuario -d postgres -f context/init.sql
+
+# 2. Ejecuta el script de usuarios de prueba (opcional)
+psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
+
+El script `init.sql` crea:
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes
+- Roles por defecto: admin, profesor, estudiante
+- Índices para optimización
+- Triggers para actualización automática de fechas
+
+### Usuarios de Prueba
+
+Si ejecutaste `usuarios_prueba.sql`, tendrás las siguientes credenciales:
+
+**Administrador:**
+- Email: `admin@aulavirtual.com`
+- Contraseña: `admin123`
+
+**Profesores:**
+- Email: `profesor1@aulavirtual.com` - Contraseña: `profesor123`
+- Email: `profesor2@aulavirtual.com` - Contraseña: `profesor123`
+
+**Estudiantes:**
+- Email: `estudiante1@aulavirtual.com` - Contraseña: `estudiante123`
+- Email: `estudiante2@aulavirtual.com` - Contraseña: `estudiante123`
 
 ### 2. Backend
 
@@ -68,7 +297,7 @@ npm install
 Crea un archivo `.env` en la carpeta `backend/`:
 
 ```env
-PORT=5001
+PORT=5000
 NODE_ENV=development
 
 DB_HOST=localhost
@@ -80,6 +309,8 @@ DB_PASSWORD=tu_contraseña
 JWT_SECRET=tu_secreto_jwt_muy_seguro
 JWT_EXPIRES_IN=24h
 ```
+
+Nota: Asegúrate de crear el archivo `.env` basándote en el ejemplo anterior con tus propias credenciales.
 
 ### 3. Frontend
 
@@ -95,9 +326,9 @@ npm install
 **Backend:**
 ```bash
 cd backend
-npm start
+npm run dev
 ```
-El servidor correrá en `http://localhost:5001`
+El servidor correrá en `http://localhost:5000`
 
 **Frontend:**
 ```bash
@@ -130,6 +361,29 @@ npm run preview
 - ✅ Tokens JWT
 - ✅ Protección de rutas
 - ✅ Roles de usuario (estudiante, profesor, administrador)
+- ✅ Context API para gestión de estado de autenticación
+
+### Gestión de Aulas (Administrador)
+- ✅ Crear aulas con nombre, descripción y capacidad
+- ✅ Editar aulas existentes
+- ✅ Eliminar/desactivar aulas
+- ✅ Asignar profesores a aulas
+- ✅ Desasignar profesores de aulas
+- ✅ Ver lista completa de aulas del sistema
+
+### Funcionalidades del Profesor
+- ✅ Ver aulas asignadas
+- ✅ Gestionar clave de matriculación (pública o privada)
+- ✅ Ver lista de estudiantes matriculados
+- ✅ Ver información detallada de cada aula
+
+### Funcionalidades del Estudiante
+- ✅ Explorar aulas disponibles
+- ✅ Matricularse en aulas públicas
+- ✅ Matricularse en aulas privadas (con clave)
+- ✅ Ver aulas en las que está matriculado
+- ✅ Desmatricularse de aulas
+- ✅ Ver información de profesores asignados
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -143,7 +397,7 @@ npm run preview
 ### Autenticación
 
 **POST** `/api/auth/registro`
-- Registra un nuevo usuario
+- Registra un nuevo usuario (rol estudiante por defecto)
 - Body: `{ nombre, apellido, email, password }`
 - Respuesta: `{ success, message, data: { usuario, token } }`
 
@@ -152,9 +406,78 @@ npm run preview
 - Body: `{ email, password }`
 - Respuesta: `{ success, message, data: { usuario, token } }`
 
-### Rutas Protegidas
+### Aulas (Admin)
+
+Requieren header: `Authorization: Bearer <token>` y rol **admin**
+
+**GET** `/api/aulas`
+- Lista todas las aulas del sistema
+- Respuesta: `{ success, data: [...aulas], total }`
+
+**POST** `/api/aulas`
+- Crea una nueva aula
+- Body: `{ nombre, descripcion, capacidad_maxima }`
+- Respuesta: `{ success, message, data: aula }`
+
+**PUT** `/api/aulas/:id`
+- Actualiza una aula existente
+- Body: `{ nombre, descripcion, capacidad_maxima, activo }`
+- Respuesta: `{ success, message, data: aula }`
+
+**DELETE** `/api/aulas/:id`
+- Elimina (desactiva) un aula
+- Respuesta: `{ success, message }`
+
+**POST** `/api/aulas/asignar-profesor`
+- Asigna un profesor a un aula
+- Body: `{ aula_id, profesor_id }`
+- Respuesta: `{ success, message }`
+
+**DELETE** `/api/aulas/desasignar-profesor/:aula_id/:profesor_id`
+- Desasigna un profesor de un aula
+- Respuesta: `{ success, message }`
+
+### Matriculación - Profesores
+
+Requieren header: `Authorization: Bearer <token>` y rol **profesor**
+
+**PUT** `/api/matriculacion/aula/clave`
+- Gestiona la clave de matriculación de un aula
+- Body: `{ aula_id, clave_matriculacion }` (null = aula pública)
+- Respuesta: `{ success, message, data }`
+
+**GET** `/api/matriculacion/aula/:aula_id/estudiantes`
+- Obtiene lista de estudiantes de un aula
+- Respuesta: `{ success, data: [...estudiantes], total }`
+
+### Matriculación - Estudiantes
+
+Requieren header: `Authorization: Bearer <token>` y rol **estudiante**
+
+**GET** `/api/matriculacion/aulas-disponibles`
+- Lista todas las aulas disponibles para matriculación
+- Respuesta: `{ success, data: [...aulas], total }`
+
+**POST** `/api/matriculacion/matricularse`
+- Matricularse en un aula
+- Body: `{ aula_id, clave_matriculacion }` (clave solo si es requerida)
+- Respuesta: `{ success, message, data }`
+
+**GET** `/api/matriculacion/mis-aulas`
+- Lista aulas donde el estudiante está matriculado
+- Respuesta: `{ success, data: [...aulas], total }`
+
+**DELETE** `/api/matriculacion/desmatricularse/:aula_id`
+- Desmatricularse de un aula
+- Respuesta: `{ success, message }`
+
+### Usuarios
 
 Requieren header: `Authorization: Bearer <token>`
+
+**GET** `/api/usuarios/profesores`
+- Lista todos los profesores (para asignación)
+- Respuesta: `{ success, data: [...profesores], total }`
 
 ## Roles
 

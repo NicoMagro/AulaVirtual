@@ -4,6 +4,9 @@ require('dotenv').config();
 
 const db = require('./config/database');
 const authRoutes = require('./routes/authRoutes');
+const aulasRoutes = require('./routes/aulasRoutes');
+const matriculacionRoutes = require('./routes/matriculacionRoutes');
+const usuariosRoutes = require('./routes/usuariosRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +39,15 @@ app.get('/', (req, res) => {
 
 // Rutas de autenticación
 app.use('/api/auth', authRoutes);
+
+// Rutas de aulas
+app.use('/api/aulas', aulasRoutes);
+
+// Rutas de matriculación
+app.use('/api/matriculacion', matriculacionRoutes);
+
+// Rutas de usuarios
+app.use('/api/usuarios', usuariosRoutes);
 
 // ============================================
 // Manejo de errores 404
