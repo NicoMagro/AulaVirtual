@@ -2,12 +2,12 @@ const express = require('express');
 const { body, param } = require('express-validator');
 const { autenticar, autorizarRoles } = require('../middlewares/auth');
 const {
-  obtenerContenidoAula,
-  crearBloque,
-  actualizarBloque,
-  eliminarBloque,
-  reordenarBloques,
-} = require('../controllers/contenidoController');
+  obtenerHojasAula,
+  crearHoja,
+  actualizarHoja,
+  eliminarHoja,
+  reordenarHojas,
+} = require('../controllers/hojasController');
 
 const router = express.Router();
 
@@ -15,58 +15,53 @@ const router = express.Router();
 // Validaciones
 // ============================================
 
-const validacionCrearBloque = [
+const validacionCrearHoja = [
   body('aula_id')
     .isUUID()
     .withMessage('ID de aula inválido'),
-  body('hoja_id')
+  body('nombre')
+    .notEmpty()
+    .trim()
+    .withMessage('El nombre de la hoja no puede estar vacío')
+    .isLength({ max: 100 })
+    .withMessage('El nombre de la hoja no puede exceder 100 caracteres'),
+  body('orden')
+    .isInt({ min: 0 })
+    .withMessage('El orden debe ser un número entero positivo'),
+];
+
+const validacionActualizarHoja = [
+  param('hoja_id')
     .isUUID()
     .withMessage('ID de hoja inválido'),
-  body('tipo')
-    .isIn(['titulo', 'subtitulo', 'parrafo', 'lista', 'enlace', 'separador'])
-    .withMessage('Tipo de bloque inválido'),
-  body('contenido')
+  body('nombre')
     .notEmpty()
     .trim()
-    .withMessage('El contenido no puede estar vacío'),
+    .withMessage('El nombre de la hoja no puede estar vacío')
+    .isLength({ max: 100 })
+    .withMessage('El nombre de la hoja no puede exceder 100 caracteres'),
   body('orden')
     .isInt({ min: 0 })
     .withMessage('El orden debe ser un número entero positivo'),
 ];
 
-const validacionActualizarBloque = [
-  param('bloque_id')
+const validacionEliminarHoja = [
+  param('hoja_id')
     .isUUID()
-    .withMessage('ID de bloque inválido'),
-  body('tipo')
-    .isIn(['titulo', 'subtitulo', 'parrafo', 'lista', 'enlace', 'separador'])
-    .withMessage('Tipo de bloque inválido'),
-  body('contenido')
-    .notEmpty()
-    .trim()
-    .withMessage('El contenido no puede estar vacío'),
-  body('orden')
-    .isInt({ min: 0 })
-    .withMessage('El orden debe ser un número entero positivo'),
-];
-
-const validacionEliminarBloque = [
-  param('bloque_id')
-    .isUUID()
-    .withMessage('ID de bloque inválido'),
+    .withMessage('ID de hoja inválido'),
 ];
 
 const validacionReordenar = [
   body('aula_id')
     .isUUID()
     .withMessage('ID de aula inválido'),
-  body('bloques')
+  body('hojas')
     .isArray({ min: 1 })
-    .withMessage('Debe proporcionar al menos un bloque'),
-  body('bloques.*.id')
+    .withMessage('Debe proporcionar al menos una hoja'),
+  body('hojas.*.id')
     .isUUID()
-    .withMessage('ID de bloque inválido'),
-  body('bloques.*.orden')
+    .withMessage('ID de hoja inválido'),
+  body('hojas.*.orden')
     .isInt({ min: 0 })
     .withMessage('El orden debe ser un número entero positivo'),
 ];
@@ -82,67 +77,67 @@ const validacionAulaId = [
 // ============================================
 
 /**
- * GET /api/contenido/aula/:aula_id
- * Obtener todo el contenido de un aula
+ * GET /api/hojas/aula/:aula_id
+ * Obtener todas las hojas de un aula
  * Acceso: Profesores y estudiantes con acceso al aula
  */
 router.get(
   '/aula/:aula_id',
   autenticar,
   validacionAulaId,
-  obtenerContenidoAula
+  obtenerHojasAula
 );
 
 /**
- * POST /api/contenido/bloque
- * Crear un nuevo bloque de contenido
+ * POST /api/hojas
+ * Crear una nueva hoja en un aula
  * Acceso: Solo profesores asignados al aula
  */
 router.post(
-  '/bloque',
+  '/',
   autenticar,
   autorizarRoles('profesor'),
-  validacionCrearBloque,
-  crearBloque
+  validacionCrearHoja,
+  crearHoja
 );
 
 /**
- * PUT /api/contenido/bloque/:bloque_id
- * Actualizar un bloque de contenido
+ * PUT /api/hojas/:hoja_id
+ * Actualizar una hoja existente
  * Acceso: Solo profesores asignados al aula
  */
 router.put(
-  '/bloque/:bloque_id',
+  '/:hoja_id',
   autenticar,
   autorizarRoles('profesor'),
-  validacionActualizarBloque,
-  actualizarBloque
+  validacionActualizarHoja,
+  actualizarHoja
 );
 
 /**
- * DELETE /api/contenido/bloque/:bloque_id
- * Eliminar un bloque de contenido
+ * DELETE /api/hojas/:hoja_id
+ * Eliminar una hoja
  * Acceso: Solo profesores asignados al aula
  */
 router.delete(
-  '/bloque/:bloque_id',
+  '/:hoja_id',
   autenticar,
   autorizarRoles('profesor'),
-  validacionEliminarBloque,
-  eliminarBloque
+  validacionEliminarHoja,
+  eliminarHoja
 );
 
 /**
- * PUT /api/contenido/reordenar
- * Reordenar bloques de contenido
+ * PUT /api/hojas/reordenar
+ * Reordenar hojas de un aula
  * Acceso: Solo profesores asignados al aula
  */
 router.put(
-  '/reordenar',
+  '/reordenar/bulk',
   autenticar,
   autorizarRoles('profesor'),
   validacionReordenar,
-  reordenarBloques
+  reordenarHojas
 );
 
 module.exports = router;

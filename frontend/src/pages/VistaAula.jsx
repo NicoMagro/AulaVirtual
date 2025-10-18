@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { useAuth } from '../contexts/AuthContext';
 import contenidoService from '../services/contenidoService';
 import aulasService from '../services/aulasService';
+import hojasService from '../services/hojasService';
 import {
   ArrowLeft,
   Edit,
@@ -33,6 +34,8 @@ import { CSS } from '@dnd-kit/utilities';
 // Componentes para cada tipo de bloque
 import BloqueContenido from '../components/contenido/BloqueContenido';
 import ModalEditarBloque from '../components/contenido/ModalEditarBloque';
+import TabsHojas from '../components/contenido/TabsHojas';
+import ModalGestionarHojas from '../components/contenido/ModalGestionarHojas';
 
 // Componente para un bloque arrastrable
 const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque }) => {
@@ -113,6 +116,8 @@ const VistaAula = () => {
   const { rolActivo } = useAuth();
 
   const [aula, setAula] = useState(null);
+  const [hojas, setHojas] = useState([]);
+  const [hojaActiva, setHojaActiva] = useState(null);
   const [bloques, setBloques] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -120,6 +125,7 @@ const VistaAula = () => {
   const [modalEditar, setModalEditar] = useState(false);
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
   const [nuevoBloque, setNuevoBloque] = useState(false);
+  const [modalGestionarHojas, setModalGestionarHojas] = useState(false);
 
   const esProfesor = rolActivo === 'profesor' || rolActivo === 'admin';
 
@@ -131,6 +137,30 @@ const VistaAula = () => {
     })
   );
 
+  const cargarHojas = async () => {
+    try {
+      const responseHojas = await hojasService.obtenerHojasAula(aula_id);
+      setHojas(responseHojas.data);
+
+      // Si no hay hoja activa, seleccionar la primera
+      if (!hojaActiva && responseHojas.data.length > 0) {
+        setHojaActiva(responseHojas.data[0]);
+      }
+    } catch (err) {
+      console.error('Error al cargar hojas:', err);
+    }
+  };
+
+  const cargarContenido = async (hoja_id) => {
+    try {
+      const responseContenido = await contenidoService.obtenerContenidoAula(aula_id, hoja_id);
+      setBloques(responseContenido.data);
+    } catch (err) {
+      console.error('Error al cargar contenido:', err);
+      setBloques([]);
+    }
+  };
+
   const cargarDatos = async () => {
     try {
       setLoading(true);
@@ -140,9 +170,8 @@ const VistaAula = () => {
       const responseAula = await aulasService.obtenerAula(aula_id);
       setAula(responseAula.data);
 
-      // Cargar contenido del aula
-      const responseContenido = await contenidoService.obtenerContenidoAula(aula_id);
-      setBloques(responseContenido.data);
+      // Cargar hojas del aula
+      await cargarHojas();
     } catch (err) {
       setError('Error al cargar el contenido del aula');
       console.error(err);
@@ -151,9 +180,17 @@ const VistaAula = () => {
     }
   };
 
+  // Cargar datos iniciales
   useEffect(() => {
     cargarDatos();
   }, [aula_id]);
+
+  // Cargar contenido cuando cambia la hoja activa
+  useEffect(() => {
+    if (hojaActiva) {
+      cargarContenido(hojaActiva.id);
+    }
+  }, [hojaActiva]);
 
   const handleAgregarBloque = () => {
     setBloqueSeleccionado(null);
@@ -174,7 +211,9 @@ const VistaAula = () => {
 
     try {
       await contenidoService.eliminarBloque(bloque_id);
-      await cargarDatos();
+      if (hojaActiva) {
+        await cargarContenido(hojaActiva.id);
+      }
     } catch (err) {
       alert('Error al eliminar el bloque');
       console.error(err);
@@ -182,9 +221,26 @@ const VistaAula = () => {
   };
 
   const handleGuardarBloque = async () => {
-    await cargarDatos();
+    if (hojaActiva) {
+      await cargarContenido(hojaActiva.id);
+    }
     setModalEditar(false);
     setBloqueSeleccionado(null);
+  };
+
+  const handleCambiarHoja = (hoja) => {
+    setHojaActiva(hoja);
+    setModoEdicion(false); // Salir del modo edición al cambiar de hoja
+  };
+
+  const handleGestionarHojas = () => {
+    setModalGestionarHojas(true);
+  };
+
+  const handleSuccessGestionarHojas = async () => {
+    // Recargar hojas después de gestionar
+    await cargarHojas();
+    setModalGestionarHojas(false);
   };
 
   const handleDragEnd = async (event) => {
@@ -211,7 +267,9 @@ const VistaAula = () => {
       } catch (err) {
         console.error('Error al reordenar bloques:', err);
         // Recargar si hay error para mantener sincronización
-        await cargarDatos();
+        if (hojaActiva) {
+          await cargarContenido(hojaActiva.id);
+        }
       }
     }
   };
@@ -263,6 +321,17 @@ const VistaAula = () => {
           <AlertCircle size={20} />
           {error}
         </div>
+      )}
+
+      {/* Pestañas de hojas */}
+      {hojas.length > 0 && (
+        <TabsHojas
+          hojas={hojas}
+          hojaActiva={hojaActiva}
+          onCambiarHoja={handleCambiarHoja}
+          onGestionarHojas={handleGestionarHojas}
+          esProfesor={esProfesor}
+        />
       )}
 
       {/* Contenido del aula */}
@@ -326,7 +395,7 @@ const VistaAula = () => {
       </div>
 
       {/* Modal para editar/crear bloques */}
-      {modalEditar && (
+      {modalEditar && hojaActiva && (
         <ModalEditarBloque
           isOpen={modalEditar}
           onClose={() => {
@@ -336,9 +405,21 @@ const VistaAula = () => {
           }}
           bloque={bloqueSeleccionado}
           aula_id={aula_id}
+          hoja_id={hojaActiva.id}
           onSuccess={handleGuardarBloque}
           esNuevo={nuevoBloque}
           ordenSiguiente={bloques.length}
+        />
+      )}
+
+      {/* Modal para gestionar hojas */}
+      {modalGestionarHojas && (
+        <ModalGestionarHojas
+          isOpen={modalGestionarHojas}
+          onClose={() => setModalGestionarHojas(false)}
+          hojas={hojas}
+          aula_id={aula_id}
+          onSuccess={handleSuccessGestionarHojas}
         />
       )}
     </div>

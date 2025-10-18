@@ -26,7 +26,8 @@ graph TB
         K[(aulas)]
         L[(aula_profesores)]
         M[(aula_estudiantes)]
-        N[(contenido_aulas)]
+        N[(hojas_aula)]
+        O[(contenido_aulas)]
     end
 
     A --> C
@@ -41,6 +42,7 @@ graph TB
     F --> L
     F --> M
     F --> N
+    F --> O
     H -.-> G
 ```
 
@@ -53,10 +55,12 @@ erDiagram
     usuarios ||--o{ aulas : crea
     usuarios ||--o{ aula_profesores : asignado_como
     usuarios ||--o{ aula_estudiantes : matriculado_como
+    usuarios ||--o{ hojas_aula : crea
     usuarios ||--o{ contenido_aulas : crea
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
-    aulas ||--o{ contenido_aulas : contiene
+    aulas ||--o{ hojas_aula : contiene
+    hojas_aula ||--o{ contenido_aulas : organiza
 
     usuarios {
         uuid id PK
@@ -109,9 +113,21 @@ erDiagram
         boolean activo
     }
 
+    hojas_aula {
+        uuid id PK
+        uuid aula_id FK
+        varchar nombre
+        int orden
+        boolean activo
+        uuid creado_por FK
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
+    }
+
     contenido_aulas {
         uuid id PK
         uuid aula_id FK
+        uuid hoja_id FK
         varchar tipo
         text contenido
         int orden
@@ -176,9 +192,10 @@ graph TB
         P2[Gestionar Clave Matriculación]
         P3[Ver Estudiantes]
         P4[Entrar al Aula]
-        P5[Editar Contenido del Aula]
-        P6[Agregar/Editar/Eliminar Bloques]
-        P7[Reordenar Bloques con Drag&Drop]
+        P5[Gestionar Hojas del Aula]
+        P6[Editar Contenido del Aula]
+        P7[Agregar/Editar/Eliminar Bloques]
+        P8[Reordenar Bloques con Drag&Drop]
     end
 
     subgraph "Funcionalidades Estudiante"
@@ -191,7 +208,7 @@ graph TB
     end
 
     A --> A1 & A2 & A3 & A4 & A5 & A6 & A7
-    P --> P1 & P2 & P3 & P4 & P5 & P6 & P7
+    P --> P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8
     E --> E1 & E2 & E3 & E4 & E5 & E6
 
     MR[Los usuarios pueden tener múltiples roles<br/>y cambiar entre ellos]
@@ -228,6 +245,7 @@ AulaVirtual/
 │   │   │   ├── authController.js
 │   │   │   ├── aulasController.js
 │   │   │   ├── contenidoController.js
+│   │   │   ├── hojasController.js
 │   │   │   ├── matriculacionController.js
 │   │   │   └── usuariosController.js
 │   │   ├── middlewares/      # Middleware de autenticación y autorización
@@ -236,6 +254,7 @@ AulaVirtual/
 │   │   │   ├── authRoutes.js
 │   │   │   ├── aulasRoutes.js
 │   │   │   ├── contenidoRoutes.js
+│   │   │   ├── hojasRoutes.js
 │   │   │   ├── matriculacionRoutes.js
 │   │   │   └── usuariosRoutes.js
 │   │   ├── utils/            # Utilidades (JWT, etc.)
@@ -251,7 +270,9 @@ AulaVirtual/
 │   │   │   ├── estudiante/   # Componentes específicos de estudiante
 │   │   │   ├── contenido/    # Componentes de bloques de contenido
 │   │   │   │   ├── BloqueContenido.jsx
-│   │   │   │   └── ModalEditarBloque.jsx
+│   │   │   │   ├── ModalEditarBloque.jsx
+│   │   │   │   ├── TabsHojas.jsx
+│   │   │   │   └── ModalGestionarHojas.jsx
 │   │   │   ├── Layout.jsx
 │   │   │   └── ProtectedRoute.jsx
 │   │   ├── contexts/         # Context API (autenticación)
@@ -274,6 +295,7 @@ AulaVirtual/
 │   │   │   ├── authService.js
 │   │   │   ├── aulasService.js
 │   │   │   ├── contenidoService.js
+│   │   │   ├── hojasService.js
 │   │   │   ├── matriculacionService.js
 │   │   │   └── usuariosService.js
 │   │   └── App.jsx
@@ -305,11 +327,12 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, contenido_aulas
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
 - Tipos de bloques de contenido: titulo, subtitulo, parrafo, lista, enlace, separador
+- Sistema de hojas/pestañas para organizar contenido
 
 ### Usuarios de Prueba
 
@@ -431,6 +454,9 @@ npm run preview
 - ✅ Editar bloques existentes
 - ✅ Eliminar bloques
 - ✅ Reordenar bloques con drag and drop
+- ✅ Gestionar hojas/pestañas del aula
+- ✅ Crear, editar y eliminar hojas
+- ✅ Organizar contenido en diferentes hojas
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -558,15 +584,16 @@ Requieren header: `Authorization: Bearer <token>` y rol **admin**
 
 Requieren header: `Authorization: Bearer <token>`
 
-**GET** `/api/contenido/aula/:aula_id`
-- Obtener todo el contenido de un aula ordenado
+**GET** `/api/contenido/aula/:aula_id?hoja_id=<uuid>`
+- Obtener todo el contenido de una hoja específica de un aula ordenado
+- Requiere query parameter `hoja_id`
 - Acceso: Profesores asignados, estudiantes matriculados, admin
 - Respuesta: `{ success, data: [...bloques], total }`
 
 **POST** `/api/contenido/bloque`
 - Crear un nuevo bloque de contenido
 - Acceso: Solo profesores asignados al aula
-- Body: `{ aula_id, tipo, contenido, orden }`
+- Body: `{ aula_id, hoja_id, tipo, contenido, orden }`
 - Tipos válidos: `titulo`, `subtitulo`, `parrafo`, `lista`, `enlace`, `separador`
 - Respuesta: `{ success, message, data: bloque }`
 
@@ -586,6 +613,66 @@ Requieren header: `Authorization: Bearer <token>`
 - Acceso: Solo profesores asignados al aula
 - Body: `{ aula_id, bloques: [{id, orden}, ...] }`
 - Respuesta: `{ success, message }`
+
+### Hojas de Aulas
+
+Requieren header: `Authorization: Bearer <token>`
+
+**GET** `/api/hojas/aula/:aula_id`
+- Obtener todas las hojas de un aula ordenadas
+- Acceso: Profesores asignados, estudiantes matriculados, admin
+- Respuesta: `{ success, data: [...hojas], total }`
+
+**POST** `/api/hojas`
+- Crear una nueva hoja en un aula
+- Acceso: Solo profesores asignados al aula
+- Body: `{ aula_id, nombre, orden }`
+- Respuesta: `{ success, message, data: hoja }`
+
+**PUT** `/api/hojas/:hoja_id`
+- Actualizar una hoja existente (nombre y/u orden)
+- Acceso: Solo profesores asignados al aula
+- Body: `{ nombre, orden }`
+- Respuesta: `{ success, message, data: hoja }`
+
+**DELETE** `/api/hojas/:hoja_id`
+- Eliminar una hoja (no se puede eliminar si es la única)
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message }`
+
+**PUT** `/api/hojas/reordenar/bulk`
+- Reordenar múltiples hojas a la vez
+- Acceso: Solo profesores asignados al aula
+- Body: `{ aula_id, hojas: [{id, orden}, ...] }`
+- Respuesta: `{ success, message }`
+
+## Sistema de Hojas/Pestañas
+
+Las aulas utilizan un sistema de hojas (similar a pestañas de Excel) para organizar el contenido de forma estructurada.
+
+### Características
+- Cada aula puede tener múltiples hojas con nombres personalizados
+- Las hojas se muestran como pestañas en la parte superior del aula
+- Cada hoja contiene su propio conjunto de bloques de contenido
+- El contenido de cada hoja es independiente
+- Los profesores pueden crear, editar y eliminar hojas
+- Los estudiantes pueden navegar entre hojas para ver el contenido
+
+### Gestión de Hojas (Profesores)
+
+Los profesores asignados a un aula pueden:
+- Crear nuevas hojas con nombres personalizados (ej: "General", "Unidad 1", "Evaluaciones")
+- Editar el nombre y orden de las hojas existentes
+- Eliminar hojas (protección: no se puede eliminar la única hoja del aula)
+- Reordenar hojas para cambiar el orden de las pestañas
+- Gestionar el contenido de cada hoja de forma independiente
+
+### Visualización (Estudiantes)
+
+Los estudiantes matriculados pueden:
+- Ver todas las hojas disponibles como pestañas
+- Cambiar entre hojas para acceder a diferentes secciones del contenido
+- El contenido se carga dinámicamente al seleccionar una hoja
 
 ## Sistema de Contenido de Aulas
 

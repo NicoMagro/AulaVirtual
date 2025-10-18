@@ -2,13 +2,12 @@ const { validationResult } = require('express-validator');
 const db = require('../config/database');
 
 /**
- * Obtener todo el contenido de una hoja de un aula ordenado
- * Accesible por profesores asignados y estudiantes matriculados
+ * Obtener todas las hojas de un aula ordenadas
+ * Accesible por profesores asignados, estudiantes matriculados y admin
  */
-const obtenerContenidoAula = async (req, res) => {
+const obtenerHojasAula = async (req, res) => {
   try {
     const { aula_id } = req.params;
-    const { hoja_id } = req.query; // hoja_id es query param
     const usuario_id = req.usuario.id;
     const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
 
@@ -38,42 +37,41 @@ const obtenerContenidoAula = async (req, res) => {
       });
     }
 
-    // Obtener el contenido ordenado filtrado por hoja
-    const contenido = await db.query(
+    // Obtener las hojas ordenadas
+    const hojas = await db.query(
       `SELECT
         id,
-        tipo,
-        contenido,
+        nombre,
         orden,
         fecha_creacion,
         fecha_actualizacion
-      FROM contenido_aulas
-      WHERE aula_id = $1 AND hoja_id = $2
+      FROM hojas_aula
+      WHERE aula_id = $1 AND activo = true
       ORDER BY orden ASC`,
-      [aula_id, hoja_id]
+      [aula_id]
     );
 
     res.status(200).json({
       success: true,
-      data: contenido.rows,
-      total: contenido.rows.length,
+      data: hojas.rows,
+      total: hojas.rows.length,
     });
 
   } catch (error) {
-    console.error('Error al obtener contenido del aula:', error);
+    console.error('Error al obtener hojas del aula:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al obtener el contenido del aula',
+      message: 'Error al obtener las hojas del aula',
       error: error.message,
     });
   }
 };
 
 /**
- * Crear un nuevo bloque de contenido
+ * Crear una nueva hoja en un aula
  * Solo profesores asignados al aula
  */
-const crearBloque = async (req, res) => {
+const crearHoja = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -83,7 +81,7 @@ const crearBloque = async (req, res) => {
       });
     }
 
-    const { aula_id, hoja_id, tipo, contenido, orden } = req.body;
+    const { aula_id, nombre, orden } = req.body;
     const usuario_id = req.usuario.id;
 
     // Verificar que el usuario es profesor del aula
@@ -99,35 +97,48 @@ const crearBloque = async (req, res) => {
       });
     }
 
-    // Crear el bloque
+    // Verificar que no exista una hoja con el mismo nombre en el aula
+    const hojaExistente = await db.query(
+      'SELECT * FROM hojas_aula WHERE aula_id = $1 AND nombre = $2 AND activo = true',
+      [aula_id, nombre]
+    );
+
+    if (hojaExistente.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe una hoja con ese nombre en esta aula',
+      });
+    }
+
+    // Crear la hoja
     const resultado = await db.query(
-      `INSERT INTO contenido_aulas (aula_id, hoja_id, tipo, contenido, orden, creado_por)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO hojas_aula (aula_id, nombre, orden, creado_por)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [aula_id, hoja_id, tipo, contenido, orden, usuario_id]
+      [aula_id, nombre, orden, usuario_id]
     );
 
     res.status(201).json({
       success: true,
-      message: 'Bloque creado exitosamente',
+      message: 'Hoja creada exitosamente',
       data: resultado.rows[0],
     });
 
   } catch (error) {
-    console.error('Error al crear bloque:', error);
+    console.error('Error al crear hoja:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al crear el bloque',
+      message: 'Error al crear la hoja',
       error: error.message,
     });
   }
 };
 
 /**
- * Actualizar un bloque de contenido existente
+ * Actualizar una hoja existente
  * Solo profesores asignados al aula
  */
-const actualizarBloque = async (req, res) => {
+const actualizarHoja = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -137,24 +148,24 @@ const actualizarBloque = async (req, res) => {
       });
     }
 
-    const { bloque_id } = req.params;
-    const { tipo, contenido, orden } = req.body;
+    const { hoja_id } = req.params;
+    const { nombre, orden } = req.body;
     const usuario_id = req.usuario.id;
 
-    // Obtener el aula_id del bloque
-    const bloqueActual = await db.query(
-      'SELECT aula_id FROM contenido_aulas WHERE id = $1',
-      [bloque_id]
+    // Obtener el aula_id de la hoja
+    const hojaActual = await db.query(
+      'SELECT aula_id FROM hojas_aula WHERE id = $1',
+      [hoja_id]
     );
 
-    if (bloqueActual.rows.length === 0) {
+    if (hojaActual.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Bloque no encontrado',
+        message: 'Hoja no encontrada',
       });
     }
 
-    const aula_id = bloqueActual.rows[0].aula_id;
+    const aula_id = hojaActual.rows[0].aula_id;
 
     // Verificar que el usuario es profesor del aula
     const esProfesor = await db.query(
@@ -169,54 +180,68 @@ const actualizarBloque = async (req, res) => {
       });
     }
 
-    // Actualizar el bloque
+    // Verificar que no exista otra hoja con el mismo nombre en el aula
+    const hojaExistente = await db.query(
+      'SELECT * FROM hojas_aula WHERE aula_id = $1 AND nombre = $2 AND id != $3 AND activo = true',
+      [aula_id, nombre, hoja_id]
+    );
+
+    if (hojaExistente.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ya existe una hoja con ese nombre en esta aula',
+      });
+    }
+
+    // Actualizar la hoja
     const resultado = await db.query(
-      `UPDATE contenido_aulas
-       SET tipo = $1, contenido = $2, orden = $3
-       WHERE id = $4
+      `UPDATE hojas_aula
+       SET nombre = $1, orden = $2
+       WHERE id = $3
        RETURNING *`,
-      [tipo, contenido, orden, bloque_id]
+      [nombre, orden, hoja_id]
     );
 
     res.status(200).json({
       success: true,
-      message: 'Bloque actualizado exitosamente',
+      message: 'Hoja actualizada exitosamente',
       data: resultado.rows[0],
     });
 
   } catch (error) {
-    console.error('Error al actualizar bloque:', error);
+    console.error('Error al actualizar hoja:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al actualizar el bloque',
+      message: 'Error al actualizar la hoja',
       error: error.message,
     });
   }
 };
 
 /**
- * Eliminar un bloque de contenido
+ * Eliminar una hoja
  * Solo profesores asignados al aula
+ * No se puede eliminar si es la única hoja del aula
  */
-const eliminarBloque = async (req, res) => {
+const eliminarHoja = async (req, res) => {
   try {
-    const { bloque_id } = req.params;
+    const { hoja_id } = req.params;
     const usuario_id = req.usuario.id;
 
-    // Obtener el aula_id del bloque
-    const bloqueActual = await db.query(
-      'SELECT aula_id FROM contenido_aulas WHERE id = $1',
-      [bloque_id]
+    // Obtener el aula_id de la hoja
+    const hojaActual = await db.query(
+      'SELECT aula_id FROM hojas_aula WHERE id = $1',
+      [hoja_id]
     );
 
-    if (bloqueActual.rows.length === 0) {
+    if (hojaActual.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Bloque no encontrado',
+        message: 'Hoja no encontrada',
       });
     }
 
-    const aula_id = bloqueActual.rows[0].aula_id;
+    const aula_id = hojaActual.rows[0].aula_id;
 
     // Verificar que el usuario es profesor del aula
     const esProfesor = await db.query(
@@ -231,29 +256,42 @@ const eliminarBloque = async (req, res) => {
       });
     }
 
-    // Eliminar el bloque
-    await db.query('DELETE FROM contenido_aulas WHERE id = $1', [bloque_id]);
+    // Verificar que no sea la única hoja activa del aula
+    const totalHojas = await db.query(
+      'SELECT COUNT(*) as total FROM hojas_aula WHERE aula_id = $1 AND activo = true',
+      [aula_id]
+    );
+
+    if (parseInt(totalHojas.rows[0].total) <= 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'No se puede eliminar la única hoja del aula',
+      });
+    }
+
+    // Eliminar la hoja (cascada eliminará el contenido)
+    await db.query('DELETE FROM hojas_aula WHERE id = $1', [hoja_id]);
 
     res.status(200).json({
       success: true,
-      message: 'Bloque eliminado exitosamente',
+      message: 'Hoja eliminada exitosamente',
     });
 
   } catch (error) {
-    console.error('Error al eliminar bloque:', error);
+    console.error('Error al eliminar hoja:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al eliminar el bloque',
+      message: 'Error al eliminar la hoja',
       error: error.message,
     });
   }
 };
 
 /**
- * Reordenar bloques de contenido
+ * Reordenar hojas de un aula
  * Solo profesores asignados al aula
  */
-const reordenarBloques = async (req, res) => {
+const reordenarHojas = async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -263,7 +301,7 @@ const reordenarBloques = async (req, res) => {
       });
     }
 
-    const { aula_id, bloques } = req.body; // bloques = [{id, orden}, ...]
+    const { aula_id, hojas } = req.body; // hojas = [{id, orden}, ...]
     const usuario_id = req.usuario.id;
 
     // Verificar que el usuario es profesor del aula
@@ -279,15 +317,15 @@ const reordenarBloques = async (req, res) => {
       });
     }
 
-    // Actualizar el orden de cada bloque
+    // Actualizar el orden de cada hoja
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
 
-      for (const bloque of bloques) {
+      for (const hoja of hojas) {
         await client.query(
-          'UPDATE contenido_aulas SET orden = $1 WHERE id = $2 AND aula_id = $3',
-          [bloque.orden, bloque.id, aula_id]
+          'UPDATE hojas_aula SET orden = $1 WHERE id = $2 AND aula_id = $3',
+          [hoja.orden, hoja.id, aula_id]
         );
       }
 
@@ -295,7 +333,7 @@ const reordenarBloques = async (req, res) => {
 
       res.status(200).json({
         success: true,
-        message: 'Bloques reordenados exitosamente',
+        message: 'Hojas reordenadas exitosamente',
       });
 
     } catch (error) {
@@ -306,19 +344,19 @@ const reordenarBloques = async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Error al reordenar bloques:', error);
+    console.error('Error al reordenar hojas:', error);
     res.status(500).json({
       success: false,
-      message: 'Error al reordenar los bloques',
+      message: 'Error al reordenar las hojas',
       error: error.message,
     });
   }
 };
 
 module.exports = {
-  obtenerContenidoAula,
-  crearBloque,
-  actualizarBloque,
-  eliminarBloque,
-  reordenarBloques,
+  obtenerHojasAula,
+  crearHoja,
+  actualizarHoja,
+  eliminarHoja,
+  reordenarHojas,
 };

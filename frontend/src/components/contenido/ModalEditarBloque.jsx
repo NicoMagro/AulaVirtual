@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { X, AlertCircle } from 'lucide-react';
 import contenidoService from '../../services/contenidoService';
 
-const ModalEditarBloque = ({ isOpen, onClose, bloque, aula_id, onSuccess, esNuevo, ordenSiguiente }) => {
+const ModalEditarBloque = ({ isOpen, onClose, bloque, aula_id, hoja_id, onSuccess, esNuevo, ordenSiguiente }) => {
   const [formData, setFormData] = useState({
     tipo: 'parrafo',
     contenido: '',
@@ -37,6 +37,7 @@ const ModalEditarBloque = ({ isOpen, onClose, bloque, aula_id, onSuccess, esNuev
       if (esNuevo) {
         await contenidoService.crearBloque({
           aula_id,
+          hoja_id,
           ...formData,
         });
       } else {
@@ -227,6 +228,7 @@ ModalEditarBloque.propTypes = {
   onClose: PropTypes.func.isRequired,
   bloque: PropTypes.object,
   aula_id: PropTypes.string.isRequired,
+  hoja_id: PropTypes.string.isRequired,
   onSuccess: PropTypes.func.isRequired,
   esNuevo: PropTypes.bool.isRequired,
   ordenSiguiente: PropTypes.number.isRequired,

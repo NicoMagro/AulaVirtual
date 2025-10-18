@@ -2,11 +2,13 @@ import api from './api';
 
 const contenidoService = {
   /**
-   * Obtener todo el contenido de un aula
+   * Obtener todo el contenido de una hoja de un aula
    * Accesible por profesores asignados y estudiantes matriculados
    */
-  obtenerContenidoAula: async (aula_id) => {
-    const response = await api.get(`/contenido/aula/${aula_id}`);
+  obtenerContenidoAula: async (aula_id, hoja_id) => {
+    const response = await api.get(`/contenido/aula/${aula_id}`, {
+      params: { hoja_id },
+    });
     return response.data;
   },
 
