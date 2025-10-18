@@ -118,6 +118,7 @@ erDiagram
         uuid aula_id FK
         varchar nombre
         int orden
+        boolean visible
         boolean activo
         uuid creado_por FK
         timestamp fecha_creacion
@@ -131,6 +132,7 @@ erDiagram
         varchar tipo
         text contenido
         int orden
+        boolean visible
         uuid creado_por FK
         timestamp fecha_creacion
         timestamp fecha_actualizacion
@@ -457,6 +459,9 @@ npm run preview
 - ✅ Gestionar hojas/pestañas del aula
 - ✅ Crear, editar y eliminar hojas
 - ✅ Organizar contenido en diferentes hojas
+- ✅ Ocultar/mostrar hojas completas para estudiantes
+- ✅ Ocultar/mostrar bloques individuales para estudiantes
+- ✅ Preparar contenido anticipadamente sin que estudiantes lo vean
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -614,6 +619,11 @@ Requieren header: `Authorization: Bearer <token>`
 - Body: `{ aula_id, bloques: [{id, orden}, ...] }`
 - Respuesta: `{ success, message }`
 
+**PUT** `/api/contenido/bloque/:bloque_id/visible`
+- Cambiar visibilidad de un bloque (toggle visible/oculto)
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message, data: bloque }`
+
 ### Hojas de Aulas
 
 Requieren header: `Authorization: Bearer <token>`
@@ -645,6 +655,11 @@ Requieren header: `Authorization: Bearer <token>`
 - Acceso: Solo profesores asignados al aula
 - Body: `{ aula_id, hojas: [{id, orden}, ...] }`
 - Respuesta: `{ success, message }`
+
+**PUT** `/api/hojas/:hoja_id/visible`
+- Cambiar visibilidad de una hoja (toggle visible/oculta)
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message, data: hoja }`
 
 ## Sistema de Hojas/Pestañas
 
@@ -704,6 +719,72 @@ Los estudiantes matriculados pueden:
 - Navegar entre diferentes bloques
 - Acceder a enlaces externos
 - Visualizar el contenido ordenado según configuración del profesor
+
+## Sistema de Visibilidad de Contenido
+
+El sistema permite a los profesores controlar qué contenido es visible para los estudiantes, facilitando la preparación anticipada de material sin publicarlo inmediatamente.
+
+### Características Principales
+
+**Control Granular:**
+- **Hojas completas**: Ocultar pestañas/hojas enteras del aula
+- **Bloques individuales**: Ocultar bloques específicos dentro de hojas visibles
+- **Toggle rápido**: Cambiar visibilidad con un click
+
+**Filtrado Automático:**
+- **Estudiantes**: Solo ven contenido marcado como `visible=true`
+- **Profesores/Admins**: Ven todo el contenido con indicadores visuales de lo oculto
+
+### Uso para Profesores
+
+**Preparación Anticipada:**
+1. Crear contenido de clases futuras
+2. Marcarlo como oculto
+3. Los estudiantes no lo ven hasta que se active
+
+**Gestión de Hojas:**
+- Badge "Oculta" en pestañas no visibles
+- Botón con icono de ojo al hacer hover sobre la pestaña
+- Opacidad reducida para distinguir hojas ocultas
+- Click en el icono para toggle visible/oculto
+
+**Gestión de Bloques:**
+- Border amarillo punteado para bloques ocultos
+- Badge "Oculto para estudiantes" en la esquina del bloque
+- Botón con icono de ojo en los controles de edición
+- Colores diferentes: azul (visible) / amarillo (oculto)
+
+### Casos de Uso
+
+**Ejemplo 1: Preparar Unidad Futura**
+```
+1. Profesor crea hoja "Unidad 3"
+2. Marca la hoja como oculta
+3. Agrega todo el contenido de la unidad
+4. Cuando llegue el momento, activa la hoja
+5. Estudiantes ven instantáneamente todo el contenido
+```
+
+**Ejemplo 2: Ocultar Evaluación**
+```
+1. Profesor tiene hoja "Evaluaciones" visible
+2. Crea bloque con "Examen Final"
+3. Marca el bloque como oculto
+4. El día del examen, lo activa
+5. Solo ese bloque aparece para los estudiantes
+```
+
+### Indicadores Visuales
+
+**Para Profesores:**
+- Hojas ocultas: Badge amarillo + opacidad reducida
+- Bloques ocultos: Border punteado amarillo + badge informativo
+- Iconos: Ojo (visible) / Ojo tachado (oculto)
+
+**Para Estudiantes:**
+- No ven ningún indicador
+- Simplemente no aparece el contenido oculto
+- Experiencia limpia sin distracciones
 
 ## Roles y Múltiples Roles
 

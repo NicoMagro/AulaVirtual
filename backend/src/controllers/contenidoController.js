@@ -39,19 +39,26 @@ const obtenerContenidoAula = async (req, res) => {
     }
 
     // Obtener el contenido ordenado filtrado por hoja
-    const contenido = await db.query(
-      `SELECT
-        id,
-        tipo,
-        contenido,
-        orden,
-        fecha_creacion,
-        fecha_actualizacion
-      FROM contenido_aulas
-      WHERE aula_id = $1 AND hoja_id = $2
-      ORDER BY orden ASC`,
-      [aula_id, hoja_id]
-    );
+    // Profesores y admins ven todo el contenido, estudiantes solo el visible
+    let query = `SELECT
+      id,
+      tipo,
+      contenido,
+      orden,
+      visible,
+      fecha_creacion,
+      fecha_actualizacion
+    FROM contenido_aulas
+    WHERE aula_id = $1 AND hoja_id = $2`;
+
+    // Si es estudiante, filtrar solo contenido visible
+    if (rol_activo === 'estudiante') {
+      query += ' AND visible = true';
+    }
+
+    query += ' ORDER BY orden ASC';
+
+    const contenido = await db.query(query, [aula_id, hoja_id]);
 
     res.status(200).json({
       success: true,
@@ -315,10 +322,72 @@ const reordenarBloques = async (req, res) => {
   }
 };
 
+/**
+ * Cambiar visibilidad de un bloque de contenido
+ * Solo profesores asignados al aula
+ */
+const cambiarVisibilidadBloque = async (req, res) => {
+  try {
+    const { bloque_id } = req.params;
+    const usuario_id = req.usuario.id;
+
+    // Obtener el aula_id y visibilidad actual del bloque
+    const bloqueActual = await db.query(
+      'SELECT aula_id, visible FROM contenido_aulas WHERE id = $1',
+      [bloque_id]
+    );
+
+    if (bloqueActual.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bloque no encontrado',
+      });
+    }
+
+    const aula_id = bloqueActual.rows[0].aula_id;
+    const visibleActual = bloqueActual.rows[0].visible;
+
+    // Verificar que el usuario es profesor del aula
+    const esProfesor = await db.query(
+      'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+      [aula_id, usuario_id]
+    );
+
+    if (esProfesor.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permisos para editar esta aula',
+      });
+    }
+
+    // Cambiar la visibilidad (toggle)
+    const nuevoValor = !visibleActual;
+    const resultado = await db.query(
+      'UPDATE contenido_aulas SET visible = $1 WHERE id = $2 RETURNING *',
+      [nuevoValor, bloque_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Bloque ${nuevoValor ? 'visible' : 'oculto'} exitosamente`,
+      data: resultado.rows[0],
+    });
+
+  } catch (error) {
+    console.error('Error al cambiar visibilidad de bloque:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al cambiar la visibilidad del bloque',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   obtenerContenidoAula,
   crearBloque,
   actualizarBloque,
   eliminarBloque,
   reordenarBloques,
+  cambiarVisibilidadBloque,
 };

@@ -7,6 +7,7 @@ const {
   actualizarHoja,
   eliminarHoja,
   reordenarHojas,
+  cambiarVisibilidadHoja,
 } = require('../controllers/hojasController');
 
 const router = express.Router();
@@ -138,6 +139,19 @@ router.put(
   autorizarRoles('profesor'),
   validacionReordenar,
   reordenarHojas
+);
+
+/**
+ * PUT /api/hojas/:hoja_id/visible
+ * Cambiar visibilidad de una hoja (toggle visible/oculta)
+ * Acceso: Solo profesores asignados al aula
+ */
+router.put(
+  '/:hoja_id/visible',
+  autenticar,
+  autorizarRoles('profesor'),
+  [param('hoja_id').isUUID().withMessage('ID de hoja inválido')],
+  cambiarVisibilidadHoja
 );
 
 module.exports = router;

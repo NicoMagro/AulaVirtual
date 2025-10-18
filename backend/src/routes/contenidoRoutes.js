@@ -7,6 +7,7 @@ const {
   actualizarBloque,
   eliminarBloque,
   reordenarBloques,
+  cambiarVisibilidadBloque,
 } = require('../controllers/contenidoController');
 
 const router = express.Router();
@@ -143,6 +144,19 @@ router.put(
   autorizarRoles('profesor'),
   validacionReordenar,
   reordenarBloques
+);
+
+/**
+ * PUT /api/contenido/bloque/:bloque_id/visible
+ * Cambiar visibilidad de un bloque (toggle visible/oculto)
+ * Acceso: Solo profesores asignados al aula
+ */
+router.put(
+  '/bloque/:bloque_id/visible',
+  autenticar,
+  autorizarRoles('profesor'),
+  [param('bloque_id').isUUID().withMessage('ID de bloque inválido')],
+  cambiarVisibilidadBloque
 );
 
 module.exports = router;

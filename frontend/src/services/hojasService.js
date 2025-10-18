@@ -48,6 +48,15 @@ const hojasService = {
     });
     return response.data;
   },
+
+  /**
+   * Cambiar visibilidad de una hoja (toggle visible/oculta)
+   * Solo profesores asignados al aula
+   */
+  cambiarVisibilidadHoja: async (hoja_id) => {
+    const response = await api.put(`/hojas/${hoja_id}/visible`);
+    return response.data;
+  },
 };
 
 export default hojasService;

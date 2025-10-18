@@ -13,6 +13,8 @@ import {
   Trash2,
   GripVertical,
   AlertCircle,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   DndContext,
@@ -38,7 +40,7 @@ import TabsHojas from '../components/contenido/TabsHojas';
 import ModalGestionarHojas from '../components/contenido/ModalGestionarHojas';
 
 // Componente para un bloque arrastrable
-const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque }) => {
+const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque, handleToggleVisibilidadBloque }) => {
   const {
     attributes,
     listeners,
@@ -60,8 +62,17 @@ const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, h
       style={style}
       className={`group relative ${
         modoEdicion ? 'hover:bg-gray-50 rounded-lg p-2 transition-colors' : ''
-      }`}
+      } ${!bloque.visible && esProfesor ? 'opacity-50 border-2 border-dashed border-yellow-300 rounded-lg' : ''}`}
     >
+      {/* Indicador de bloque oculto */}
+      {esProfesor && !bloque.visible && (
+        <div className="absolute top-2 left-2 z-10">
+          <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded shadow-sm">
+            Oculto para estudiantes
+          </span>
+        </div>
+      )}
+
       {/* Controles de edición */}
       {modoEdicion && esProfesor && (
         <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -79,9 +90,16 @@ const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, h
       {/* Contenido del bloque */}
       <BloqueContenido bloque={bloque} />
 
-      {/* Botones de edición y eliminación */}
+      {/* Botones de edición, visibilidad y eliminación */}
       {modoEdicion && esProfesor && (
         <div className="absolute -right-2 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => handleToggleVisibilidadBloque(bloque.id)}
+            className={`p-2 ${bloque.visible ? 'bg-blue-500 hover:bg-blue-600' : 'bg-yellow-500 hover:bg-yellow-600'} text-white rounded shadow-md`}
+            title={bloque.visible ? 'Ocultar para estudiantes' : 'Mostrar a estudiantes'}
+          >
+            {bloque.visible ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
           <button
             onClick={() => handleEditarBloque(bloque)}
             className="p-2 bg-primary-500 hover:bg-primary-600 text-white rounded shadow-md"
@@ -108,6 +126,7 @@ BloqueSortable.propTypes = {
   esProfesor: PropTypes.bool.isRequired,
   handleEditarBloque: PropTypes.func.isRequired,
   handleEliminarBloque: PropTypes.func.isRequired,
+  handleToggleVisibilidadBloque: PropTypes.func.isRequired,
 };
 
 const VistaAula = () => {
@@ -243,6 +262,19 @@ const VistaAula = () => {
     setModalGestionarHojas(false);
   };
 
+  const handleToggleVisibilidadBloque = async (bloque_id) => {
+    try {
+      await contenidoService.cambiarVisibilidadBloque(bloque_id);
+      // Recargar contenido de la hoja activa
+      if (hojaActiva) {
+        await cargarContenido(hojaActiva.id);
+      }
+    } catch (err) {
+      alert('Error al cambiar la visibilidad del bloque');
+      console.error(err);
+    }
+  };
+
   const handleDragEnd = async (event) => {
     const { active, over } = event;
 
@@ -331,6 +363,7 @@ const VistaAula = () => {
           onCambiarHoja={handleCambiarHoja}
           onGestionarHojas={handleGestionarHojas}
           esProfesor={esProfesor}
+          onHojasActualizadas={cargarHojas}
         />
       )}
 
@@ -373,6 +406,7 @@ const VistaAula = () => {
                     esProfesor={esProfesor}
                     handleEditarBloque={handleEditarBloque}
                     handleEliminarBloque={handleEliminarBloque}
+                    handleToggleVisibilidadBloque={handleToggleVisibilidadBloque}
                   />
                 ))}
 

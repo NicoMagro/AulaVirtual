@@ -38,18 +38,25 @@ const obtenerHojasAula = async (req, res) => {
     }
 
     // Obtener las hojas ordenadas
-    const hojas = await db.query(
-      `SELECT
-        id,
-        nombre,
-        orden,
-        fecha_creacion,
-        fecha_actualizacion
-      FROM hojas_aula
-      WHERE aula_id = $1 AND activo = true
-      ORDER BY orden ASC`,
-      [aula_id]
-    );
+    // Profesores y admins ven todas las hojas, estudiantes solo las visibles
+    let query = `SELECT
+      id,
+      nombre,
+      orden,
+      visible,
+      fecha_creacion,
+      fecha_actualizacion
+    FROM hojas_aula
+    WHERE aula_id = $1 AND activo = true`;
+
+    // Si es estudiante, filtrar solo hojas visibles
+    if (rol_activo === 'estudiante') {
+      query += ' AND visible = true';
+    }
+
+    query += ' ORDER BY orden ASC';
+
+    const hojas = await db.query(query, [aula_id]);
 
     res.status(200).json({
       success: true,
@@ -353,10 +360,72 @@ const reordenarHojas = async (req, res) => {
   }
 };
 
+/**
+ * Cambiar visibilidad de una hoja
+ * Solo profesores asignados al aula
+ */
+const cambiarVisibilidadHoja = async (req, res) => {
+  try {
+    const { hoja_id } = req.params;
+    const usuario_id = req.usuario.id;
+
+    // Obtener el aula_id y visibilidad actual de la hoja
+    const hojaActual = await db.query(
+      'SELECT aula_id, visible FROM hojas_aula WHERE id = $1',
+      [hoja_id]
+    );
+
+    if (hojaActual.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Hoja no encontrada',
+      });
+    }
+
+    const aula_id = hojaActual.rows[0].aula_id;
+    const visibleActual = hojaActual.rows[0].visible;
+
+    // Verificar que el usuario es profesor del aula
+    const esProfesor = await db.query(
+      'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+      [aula_id, usuario_id]
+    );
+
+    if (esProfesor.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permisos para editar esta aula',
+      });
+    }
+
+    // Cambiar la visibilidad (toggle)
+    const nuevoValor = !visibleActual;
+    const resultado = await db.query(
+      'UPDATE hojas_aula SET visible = $1 WHERE id = $2 RETURNING *',
+      [nuevoValor, hoja_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: `Hoja ${nuevoValor ? 'visible' : 'oculta'} exitosamente`,
+      data: resultado.rows[0],
+    });
+
+  } catch (error) {
+    console.error('Error al cambiar visibilidad de hoja:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al cambiar la visibilidad de la hoja',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   obtenerHojasAula,
   crearHoja,
   actualizarHoja,
   eliminarHoja,
   reordenarHojas,
+  cambiarVisibilidadHoja,
 };

@@ -50,6 +50,15 @@ const contenidoService = {
     });
     return response.data;
   },
+
+  /**
+   * Cambiar visibilidad de un bloque (toggle visible/oculto)
+   * Solo profesores asignados al aula
+   */
+  cambiarVisibilidadBloque: async (bloque_id) => {
+    const response = await api.put(`/contenido/bloque/${bloque_id}/visible`);
+    return response.data;
+  },
 };
 
 export default contenidoService;
