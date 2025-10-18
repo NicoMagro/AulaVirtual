@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import matriculacionService from '../../services/matriculacionService';
-import { Search, Lock, Unlock, Users, Check, AlertCircle } from 'lucide-react';
+import { Search, Lock, Unlock, Users, Check, AlertCircle, Eye } from 'lucide-react';
 import ModalMatricularse from '../../components/estudiante/ModalMatricularse';
 
 const ExplorarAulas = () => {
+  const navigate = useNavigate();
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -131,10 +133,11 @@ const ExplorarAulas = () => {
 
             {aula.esta_matriculado ? (
               <button
-                disabled
-                className="w-full bg-gray-100 text-gray-500 px-4 py-2 rounded-lg cursor-not-allowed text-sm font-medium"
+                onClick={() => navigate(`/aula/${aula.id}`)}
+                className="w-full flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
               >
-                Ya estás matriculado
+                <Eye size={16} />
+                Entrar al Aula
               </button>
             ) : aula.estudiantes_actuales >= aula.capacidad_maxima ? (
               <button

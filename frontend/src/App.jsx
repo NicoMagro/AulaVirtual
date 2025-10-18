@@ -17,6 +17,9 @@ import MisAulasProfesor from './pages/profesor/MisAulas';
 import ExplorarAulas from './pages/estudiante/ExplorarAulas';
 import MisAulasEstudiante from './pages/estudiante/MisAulas';
 
+// Compartidas
+import VistaAula from './pages/VistaAula';
+
 function App() {
   return (
     <Router>
@@ -32,6 +35,18 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Vista de Aula (accesible para todos los roles autenticados) */}
+          <Route
+            path="/aula/:aula_id"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <VistaAula />
                 </Layout>
               </ProtectedRoute>
             }

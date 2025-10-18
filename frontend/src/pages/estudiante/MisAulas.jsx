@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import matriculacionService from '../../services/matriculacionService';
-import { LogOut, Users, Calendar, User, AlertCircle } from 'lucide-react';
+import { LogOut, Users, Calendar, User, AlertCircle, Eye } from 'lucide-react';
 
 const MisAulas = () => {
+  const navigate = useNavigate();
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -115,13 +117,22 @@ const MisAulas = () => {
               )}
             </div>
 
-            <button
-              onClick={() => handleDesmatricularse(aula.id, aula.nombre)}
-              className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg transition-colors text-sm font-medium"
-            >
-              <LogOut size={16} />
-              Salir del Aula
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => navigate(`/aula/${aula.id}`)}
+                className="w-full flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+              >
+                <Eye size={16} />
+                Entrar al Aula
+              </button>
+              <button
+                onClick={() => handleDesmatricularse(aula.id, aula.nombre)}
+                className="w-full flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+              >
+                <LogOut size={16} />
+                Salir del Aula
+              </button>
+            </div>
           </div>
         ))}
       </div>

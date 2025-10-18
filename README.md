@@ -26,6 +26,7 @@ graph TB
         K[(aulas)]
         L[(aula_profesores)]
         M[(aula_estudiantes)]
+        N[(contenido_aulas)]
     end
 
     A --> C
@@ -39,6 +40,7 @@ graph TB
     F --> K
     F --> L
     F --> M
+    F --> N
     H -.-> G
 ```
 
@@ -51,8 +53,10 @@ erDiagram
     usuarios ||--o{ aulas : crea
     usuarios ||--o{ aula_profesores : asignado_como
     usuarios ||--o{ aula_estudiantes : matriculado_como
+    usuarios ||--o{ contenido_aulas : crea
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
+    aulas ||--o{ contenido_aulas : contiene
 
     usuarios {
         uuid id PK
@@ -103,6 +107,17 @@ erDiagram
         uuid estudiante_id FK
         timestamp fecha_matriculacion
         boolean activo
+    }
+
+    contenido_aulas {
+        uuid id PK
+        uuid aula_id FK
+        varchar tipo
+        text contenido
+        int orden
+        uuid creado_por FK
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
     }
 ```
 
@@ -160,7 +175,10 @@ graph TB
         P1[Ver Mis Aulas]
         P2[Gestionar Clave Matriculación]
         P3[Ver Estudiantes]
-        P4[Gestionar Contenidos]
+        P4[Entrar al Aula]
+        P5[Editar Contenido del Aula]
+        P6[Agregar/Editar/Eliminar Bloques]
+        P7[Reordenar Bloques con Drag&Drop]
     end
 
     subgraph "Funcionalidades Estudiante"
@@ -168,11 +186,13 @@ graph TB
         E2[Matricularse]
         E3[Ver Mis Aulas]
         E4[Desmatricularse]
+        E5[Entrar al Aula]
+        E6[Ver Contenido del Aula]
     end
 
     A --> A1 & A2 & A3 & A4 & A5 & A6 & A7
-    P --> P1 & P2 & P3 & P4
-    E --> E1 & E2 & E3 & E4
+    P --> P1 & P2 & P3 & P4 & P5 & P6 & P7
+    E --> E1 & E2 & E3 & E4 & E5 & E6
 
     MR[Los usuarios pueden tener múltiples roles<br/>y cambiar entre ellos]
     style MR fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
@@ -194,6 +214,8 @@ graph TB
 - Axios
 - Tailwind CSS v3
 - Lucide React (iconos)
+- @dnd-kit (drag and drop)
+- PropTypes (validación de tipos)
 
 ## Estructura del Proyecto
 
@@ -205,6 +227,7 @@ AulaVirtual/
 │   │   ├── controllers/      # Controladores de lógica de negocio
 │   │   │   ├── authController.js
 │   │   │   ├── aulasController.js
+│   │   │   ├── contenidoController.js
 │   │   │   ├── matriculacionController.js
 │   │   │   └── usuariosController.js
 │   │   ├── middlewares/      # Middleware de autenticación y autorización
@@ -212,6 +235,7 @@ AulaVirtual/
 │   │   ├── routes/           # Definición de rutas de la API
 │   │   │   ├── authRoutes.js
 │   │   │   ├── aulasRoutes.js
+│   │   │   ├── contenidoRoutes.js
 │   │   │   ├── matriculacionRoutes.js
 │   │   │   └── usuariosRoutes.js
 │   │   ├── utils/            # Utilidades (JWT, etc.)
@@ -225,6 +249,9 @@ AulaVirtual/
 │   │   │   ├── admin/        # Componentes específicos de admin
 │   │   │   ├── profesor/     # Componentes específicos de profesor
 │   │   │   ├── estudiante/   # Componentes específicos de estudiante
+│   │   │   ├── contenido/    # Componentes de bloques de contenido
+│   │   │   │   ├── BloqueContenido.jsx
+│   │   │   │   └── ModalEditarBloque.jsx
 │   │   │   ├── Layout.jsx
 │   │   │   └── ProtectedRoute.jsx
 │   │   ├── contexts/         # Context API (autenticación)
@@ -240,11 +267,13 @@ AulaVirtual/
 │   │   │   │   └── MisAulas.jsx
 │   │   │   ├── Login.jsx
 │   │   │   ├── Registro.jsx
-│   │   │   └── Dashboard.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   └── VistaAula.jsx
 │   │   ├── services/         # Servicios de API
 │   │   │   ├── api.js
 │   │   │   ├── authService.js
 │   │   │   ├── aulasService.js
+│   │   │   ├── contenidoService.js
 │   │   │   ├── matriculacionService.js
 │   │   │   └── usuariosService.js
 │   │   └── App.jsx
@@ -276,10 +305,11 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, contenido_aulas
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
+- Tipos de bloques de contenido: titulo, subtitulo, parrafo, lista, enlace, separador
 
 ### Usuarios de Prueba
 
@@ -395,6 +425,12 @@ npm run preview
 - ✅ Gestionar clave de matriculación (pública o privada)
 - ✅ Ver lista de estudiantes matriculados
 - ✅ Ver información detallada de cada aula
+- ✅ Entrar al aula y ver su contenido
+- ✅ Modo edición para gestionar contenido
+- ✅ Crear bloques de contenido (6 tipos diferentes)
+- ✅ Editar bloques existentes
+- ✅ Eliminar bloques
+- ✅ Reordenar bloques con drag and drop
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -403,6 +439,8 @@ npm run preview
 - ✅ Ver aulas en las que está matriculado
 - ✅ Desmatricularse de aulas
 - ✅ Ver información de profesores asignados
+- ✅ Entrar al aula y ver su contenido
+- ✅ Visualizar todos los bloques de contenido del aula
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -515,6 +553,70 @@ Requieren header: `Authorization: Bearer <token>` y rol **admin**
 **DELETE** `/api/usuarios/:usuario_id/roles/:rol_id`
 - Quitar un rol de un usuario (requiere tener mínimo 2 roles)
 - Respuesta: `{ success, message }`
+
+### Contenido de Aulas
+
+Requieren header: `Authorization: Bearer <token>`
+
+**GET** `/api/contenido/aula/:aula_id`
+- Obtener todo el contenido de un aula ordenado
+- Acceso: Profesores asignados, estudiantes matriculados, admin
+- Respuesta: `{ success, data: [...bloques], total }`
+
+**POST** `/api/contenido/bloque`
+- Crear un nuevo bloque de contenido
+- Acceso: Solo profesores asignados al aula
+- Body: `{ aula_id, tipo, contenido, orden }`
+- Tipos válidos: `titulo`, `subtitulo`, `parrafo`, `lista`, `enlace`, `separador`
+- Respuesta: `{ success, message, data: bloque }`
+
+**PUT** `/api/contenido/bloque/:bloque_id`
+- Actualizar un bloque de contenido existente
+- Acceso: Solo profesores asignados al aula
+- Body: `{ tipo, contenido, orden }`
+- Respuesta: `{ success, message, data: bloque }`
+
+**DELETE** `/api/contenido/bloque/:bloque_id`
+- Eliminar un bloque de contenido
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message }`
+
+**PUT** `/api/contenido/reordenar`
+- Reordenar bloques de contenido mediante drag and drop
+- Acceso: Solo profesores asignados al aula
+- Body: `{ aula_id, bloques: [{id, orden}, ...] }`
+- Respuesta: `{ success, message }`
+
+## Sistema de Contenido de Aulas
+
+### Tipos de Bloques
+
+El sistema soporta 6 tipos diferentes de bloques de contenido:
+
+1. **Título**: Encabezado principal grande y destacado
+2. **Subtítulo**: Encabezado secundario para secciones
+3. **Párrafo**: Bloques de texto con soporte para saltos de línea
+4. **Lista**: Listas con viñetas (un ítem por línea)
+5. **Enlace**: Enlaces externos con texto personalizado (formato: `Texto|URL`)
+6. **Separador**: Línea divisoria decorativa
+
+### Gestión de Contenido (Profesores)
+
+Los profesores asignados a un aula pueden:
+- Activar el modo edición desde la vista del aula
+- Agregar nuevos bloques seleccionando el tipo
+- Editar bloques existentes (tipo, contenido y orden)
+- Eliminar bloques con confirmación
+- Reordenar bloques arrastrándolos con el mouse (drag and drop)
+- Los cambios se guardan automáticamente en la base de datos
+
+### Visualización (Estudiantes)
+
+Los estudiantes matriculados pueden:
+- Ver el contenido completo del aula
+- Navegar entre diferentes bloques
+- Acceder a enlaces externos
+- Visualizar el contenido ordenado según configuración del profesor
 
 ## Roles y Múltiples Roles
 

@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import aulasService from '../../services/aulasService';
-import { Users, Key, Lock, Unlock, AlertCircle } from 'lucide-react';
+import { Users, Key, Lock, Unlock, AlertCircle, Eye } from 'lucide-react';
 import ModalGestionarClave from '../../components/profesor/ModalGestionarClave';
 import ModalVerEstudiantes from '../../components/profesor/ModalVerEstudiantes';
 
 const MisAulas = () => {
+  const navigate = useNavigate();
   const [aulas, setAulas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -112,6 +114,13 @@ const MisAulas = () => {
             </div>
 
             <div className="space-y-2">
+              <button
+                onClick={() => navigate(`/aula/${aula.id}`)}
+                className="w-full flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+              >
+                <Eye size={16} />
+                Entrar al Aula
+              </button>
               <button
                 onClick={() => handleVerEstudiantes(aula)}
                 className="w-full flex items-center justify-center gap-2 bg-primary-50 hover:bg-primary-100 text-primary-700 px-4 py-2 rounded-lg transition-colors text-sm font-medium"
