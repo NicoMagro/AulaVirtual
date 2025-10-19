@@ -10,13 +10,21 @@ const api = axios.create({
   },
 });
 
-// Interceptor para agregar el token a cada petición
+// Interceptor para agregar el token y rol activo a cada petición
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Agregar el rol activo del usuario en cada petición
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const rolActivo = localStorage.getItem('rolActivo') || user.roles?.[0];
+    if (rolActivo) {
+      config.headers['x-rol-activo'] = rolActivo;
+    }
+
     return config;
   },
   (error) => {
