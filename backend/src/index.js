@@ -9,6 +9,7 @@ const matriculacionRoutes = require('./routes/matriculacionRoutes');
 const usuariosRoutes = require('./routes/usuariosRoutes');
 const contenidoRoutes = require('./routes/contenidoRoutes');
 const hojasRoutes = require('./routes/hojasRoutes');
+const archivosRoutes = require('./routes/archivosRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -56,6 +57,9 @@ app.use('/api/contenido', contenidoRoutes);
 
 // Rutas de hojas
 app.use('/api/hojas', hojasRoutes);
+
+// Rutas de archivos
+app.use('/api/archivos', archivosRoutes);
 
 // ============================================
 // Manejo de errores 404

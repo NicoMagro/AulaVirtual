@@ -26,3 +26,6 @@ Thumbs.db
 # Archivos temporales
 tmp/
 temp/
+
+# Archivos subidos por usuarios
+uploads/

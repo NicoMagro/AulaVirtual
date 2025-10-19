@@ -38,6 +38,7 @@ import BloqueContenido from '../components/contenido/BloqueContenido';
 import ModalEditarBloque from '../components/contenido/ModalEditarBloque';
 import TabsHojas from '../components/contenido/TabsHojas';
 import ModalGestionarHojas from '../components/contenido/ModalGestionarHojas';
+import ListaArchivos from '../components/contenido/ListaArchivos';
 
 // Componente para un bloque arrastrable
 const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque, handleToggleVisibilidadBloque }) => {
@@ -427,6 +428,17 @@ const VistaAula = () => {
           </DndContext>
         )}
       </div>
+
+      {/* Sección de archivos */}
+      {hojaActiva && (
+        <div className="bg-white rounded-lg shadow-md p-8">
+          <ListaArchivos
+            aula_id={aula_id}
+            hoja_id={hojaActiva.id}
+            esProfesor={esProfesor}
+          />
+        </div>
+      )}
 
       {/* Modal para editar/crear bloques */}
       {modalEditar && hojaActiva && (

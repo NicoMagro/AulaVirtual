@@ -28,6 +28,7 @@ graph TB
         M[(aula_estudiantes)]
         N[(hojas_aula)]
         O[(contenido_aulas)]
+        P[(archivos_aula)]
     end
 
     A --> C
@@ -43,6 +44,7 @@ graph TB
     F --> M
     F --> N
     F --> O
+    F --> P
     H -.-> G
 ```
 
@@ -57,10 +59,13 @@ erDiagram
     usuarios ||--o{ aula_estudiantes : matriculado_como
     usuarios ||--o{ hojas_aula : crea
     usuarios ||--o{ contenido_aulas : crea
+    usuarios ||--o{ archivos_aula : sube
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
     aulas ||--o{ hojas_aula : contiene
+    aulas ||--o{ archivos_aula : contiene
     hojas_aula ||--o{ contenido_aulas : organiza
+    hojas_aula ||--o{ archivos_aula : organiza
 
     usuarios {
         uuid id PK
@@ -137,6 +142,21 @@ erDiagram
         timestamp fecha_creacion
         timestamp fecha_actualizacion
     }
+
+    archivos_aula {
+        uuid id PK
+        uuid aula_id FK
+        uuid hoja_id FK
+        varchar nombre_original
+        varchar nombre_archivo UK
+        varchar tipo_mime
+        bigint tamano_bytes
+        text descripcion
+        boolean visible
+        uuid subido_por FK
+        timestamp fecha_subida
+        timestamp fecha_actualizacion
+    }
 ```
 
 ## Flujo de Autenticación
@@ -198,6 +218,9 @@ graph TB
         P6[Editar Contenido del Aula]
         P7[Agregar/Editar/Eliminar Bloques]
         P8[Reordenar Bloques con Drag&Drop]
+        P9[Subir Archivos al Aula]
+        P10[Ocultar/Mostrar Archivos]
+        P11[Eliminar Archivos]
     end
 
     subgraph "Funcionalidades Estudiante"
@@ -210,7 +233,7 @@ graph TB
     end
 
     A --> A1 & A2 & A3 & A4 & A5 & A6 & A7
-    P --> P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8
+    P --> P1 & P2 & P3 & P4 & P5 & P6 & P7 & P8 & P9 & P10 & P11
     E --> E1 & E2 & E3 & E4 & E5 & E6
 
     MR[Los usuarios pueden tener múltiples roles<br/>y cambiar entre ellos]
@@ -225,6 +248,8 @@ graph TB
 - JWT (autenticación)
 - bcrypt (encriptación de contraseñas)
 - express-validator (validaciones)
+- multer (subida de archivos)
+- uuid (generación de IDs únicos)
 
 ### Frontend
 - React 19
@@ -244,6 +269,7 @@ AulaVirtual/
 │   ├── src/
 │   │   ├── config/           # Configuración de la base de datos
 │   │   ├── controllers/      # Controladores de lógica de negocio
+│   │   │   ├── archivosController.js
 │   │   │   ├── authController.js
 │   │   │   ├── aulasController.js
 │   │   │   ├── contenidoController.js
@@ -253,6 +279,7 @@ AulaVirtual/
 │   │   ├── middlewares/      # Middleware de autenticación y autorización
 │   │   │   └── auth.js
 │   │   ├── routes/           # Definición de rutas de la API
+│   │   │   ├── archivosRoutes.js
 │   │   │   ├── authRoutes.js
 │   │   │   ├── aulasRoutes.js
 │   │   │   ├── contenidoRoutes.js
@@ -262,6 +289,7 @@ AulaVirtual/
 │   │   ├── utils/            # Utilidades (JWT, etc.)
 │   │   │   └── jwt.js
 │   │   └── index.js          # Punto de entrada del servidor
+│   ├── uploads/          # Archivos subidos por usuarios (no versionado)
 │   └── package.json
 │
 ├── frontend/         # Aplicación React
@@ -274,7 +302,8 @@ AulaVirtual/
 │   │   │   │   ├── BloqueContenido.jsx
 │   │   │   │   ├── ModalEditarBloque.jsx
 │   │   │   │   ├── TabsHojas.jsx
-│   │   │   │   └── ModalGestionarHojas.jsx
+│   │   │   │   ├── ModalGestionarHojas.jsx
+│   │   │   │   └── ListaArchivos.jsx
 │   │   │   ├── Layout.jsx
 │   │   │   └── ProtectedRoute.jsx
 │   │   ├── contexts/         # Context API (autenticación)
@@ -294,6 +323,7 @@ AulaVirtual/
 │   │   │   └── VistaAula.jsx
 │   │   ├── services/         # Servicios de API
 │   │   │   ├── api.js
+│   │   │   ├── archivosService.js
 │   │   │   ├── authService.js
 │   │   │   ├── aulasService.js
 │   │   │   ├── contenidoService.js
@@ -329,12 +359,13 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
 - Tipos de bloques de contenido: titulo, subtitulo, parrafo, lista, enlace, separador
 - Sistema de hojas/pestañas para organizar contenido
+- Sistema de archivos con límite de 100 MB por archivo
 
 ### Usuarios de Prueba
 
@@ -462,6 +493,10 @@ npm run preview
 - ✅ Ocultar/mostrar hojas completas para estudiantes
 - ✅ Ocultar/mostrar bloques individuales para estudiantes
 - ✅ Preparar contenido anticipadamente sin que estudiantes lo vean
+- ✅ Subir archivos al aula (PDF, Office, imágenes, videos, etc.)
+- ✅ Ocultar/mostrar archivos individuales para estudiantes
+- ✅ Eliminar archivos subidos
+- ✅ Límite de 100 MB por archivo
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -472,6 +507,7 @@ npm run preview
 - ✅ Ver información de profesores asignados
 - ✅ Entrar al aula y ver su contenido
 - ✅ Visualizar todos los bloques de contenido del aula
+- ✅ Descargar archivos compartidos por profesores
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -661,6 +697,39 @@ Requieren header: `Authorization: Bearer <token>`
 - Acceso: Solo profesores asignados al aula
 - Respuesta: `{ success, message, data: hoja }`
 
+### Archivos de Aulas
+
+Requieren header: `Authorization: Bearer <token>`
+
+**POST** `/api/archivos/subir`
+- Subir un archivo al aula
+- Acceso: Solo profesores asignados al aula
+- Body: FormData con `archivo`, `aula_id`, `hoja_id`, `descripcion` (opcional)
+- Respuesta: `{ success, message, data: archivo }`
+- Límite: 100 MB por archivo
+- Formatos soportados: PDF, Office, imágenes, videos, audio, comprimidos, etc.
+
+**GET** `/api/archivos/aula/:aula_id?hoja_id=<uuid>`
+- Obtener archivos de una hoja específica de un aula
+- Query parameter `hoja_id` opcional (si no se especifica trae todos los archivos del aula)
+- Acceso: Profesores asignados, estudiantes matriculados, admin
+- Respuesta: `{ success, data: [...archivos] }`
+
+**GET** `/api/archivos/descargar/:archivo_id`
+- Descargar un archivo
+- Acceso: Profesores y estudiantes matriculados (solo si visible)
+- Respuesta: Archivo binario con headers para descarga
+
+**DELETE** `/api/archivos/:archivo_id`
+- Eliminar un archivo (físico y registro)
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message }`
+
+**PUT** `/api/archivos/:archivo_id/visible`
+- Cambiar visibilidad de un archivo (toggle visible/oculto)
+- Acceso: Solo profesores asignados al aula
+- Respuesta: `{ success, message, data: archivo }`
+
 ## Sistema de Hojas/Pestañas
 
 Las aulas utilizan un sistema de hojas (similar a pestañas de Excel) para organizar el contenido de forma estructurada.
@@ -785,6 +854,98 @@ El sistema permite a los profesores controlar qué contenido es visible para los
 - No ven ningún indicador
 - Simplemente no aparece el contenido oculto
 - Experiencia limpia sin distracciones
+
+## Sistema de Archivos
+
+El sistema permite a los profesores compartir archivos con los estudiantes de forma organizada, con control de visibilidad y límites de tamaño.
+
+### Características Principales
+
+**Subida de Archivos:**
+- Profesores pueden subir cualquier tipo de archivo educativo
+- Límite: 100 MB por archivo
+- Organización por hojas de aula
+- Descripción opcional para cada archivo
+
+**Formatos Soportados:**
+- Documentos: PDF, Word (.doc, .docx)
+- Hojas de cálculo: Excel (.xls, .xlsx), CSV
+- Presentaciones: PowerPoint (.ppt, .pptx)
+- Imágenes: JPEG, PNG, GIF, WebP, SVG
+- Videos: MP4, MPEG, WebM
+- Audio: MP3, WAV, WebM
+- Comprimidos: ZIP, RAR, 7Z
+- Texto: TXT, Markdown
+- Otros: JSON, XML
+
+**Control de Visibilidad:**
+- Los profesores pueden ocultar archivos para estudiantes
+- Útil para preparar material antes de publicarlo
+- Toggle rápido con iconos de ojo
+
+**Gestión de Archivos:**
+- Lista de archivos con información detallada
+- Iconos específicos por tipo de archivo
+- Tamaño en formato legible (KB, MB, GB)
+- Fecha de subida y nombre del profesor que lo subió
+- Descarga directa con un click
+
+### Uso para Profesores
+
+**Subir Archivos:**
+1. Entrar al aula y seleccionar una hoja
+2. Click en "Subir Archivo"
+3. Seleccionar archivo (máx 100 MB)
+4. Agregar descripción opcional
+5. El archivo se guarda y es visible para estudiantes
+
+**Gestionar Visibilidad:**
+- Click en el icono de ojo para ocultar/mostrar
+- Archivos ocultos tienen badge "Oculto para estudiantes"
+- Border punteado amarillo para diferenciar
+
+**Eliminar Archivos:**
+- Click en el icono de basura
+- Confirmación antes de eliminar
+- Se elimina tanto el archivo físico como el registro
+
+### Uso para Estudiantes
+
+**Descargar Archivos:**
+1. Entrar al aula
+2. Ver lista de archivos disponibles (solo visibles)
+3. Click en botón de descarga
+4. El archivo se descarga automáticamente
+
+**Información Visible:**
+- Nombre del archivo
+- Descripción (si tiene)
+- Tamaño del archivo
+- Fecha de subida
+- Profesor que lo subió
+
+### Indicadores Visuales
+
+**Iconos por Tipo:**
+- PDF: Icono de documento rojo
+- Excel/CSV: Icono de hoja de cálculo verde
+- PowerPoint: Icono de presentación naranja
+- Imágenes: Icono de imagen azul
+- Videos: Icono de video púrpura
+- Audio: Icono de música rosa
+- Comprimidos: Icono de archivo amarillo
+- Otros: Icono de archivo genérico gris
+
+**Estados:**
+- Visible: Icono de ojo azul
+- Oculto: Icono de ojo tachado amarillo + border punteado
+
+### Almacenamiento
+
+- Los archivos se guardan en `/backend/uploads/`
+- Nombres únicos generados con UUID para evitar conflictos
+- Se preserva el nombre original para descargas
+- La carpeta `uploads/` está excluida del repositorio (.gitignore)
 
 ## Roles y Múltiples Roles
 
