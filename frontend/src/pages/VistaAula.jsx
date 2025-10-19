@@ -39,6 +39,7 @@ import ModalEditarBloque from '../components/contenido/ModalEditarBloque';
 import TabsHojas from '../components/contenido/TabsHojas';
 import ModalGestionarHojas from '../components/contenido/ModalGestionarHojas';
 import ListaArchivos from '../components/contenido/ListaArchivos';
+import ConsultasAula from '../components/consultas/ConsultasAula';
 
 // Componente para un bloque arrastrable
 const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque, handleToggleVisibilidadBloque }) => {
@@ -133,7 +134,7 @@ BloqueSortable.propTypes = {
 const VistaAula = () => {
   const { aula_id } = useParams();
   const navigate = useNavigate();
-  const { rolActivo } = useAuth();
+  const { rolActivo, user } = useAuth();
 
   const [aula, setAula] = useState(null);
   const [hojas, setHojas] = useState([]);
@@ -439,6 +440,15 @@ const VistaAula = () => {
           />
         </div>
       )}
+
+      {/* Sección de consultas */}
+      <div className="bg-white rounded-lg shadow-md p-8">
+        <ConsultasAula
+          aula_id={aula_id}
+          esProfesor={esProfesor}
+          usuario={user}
+        />
+      </div>
 
       {/* Modal para editar/crear bloques */}
       {modalEditar && hojaActiva && (

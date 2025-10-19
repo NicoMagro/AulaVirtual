@@ -29,6 +29,8 @@ graph TB
         N[(hojas_aula)]
         O[(contenido_aulas)]
         P[(archivos_aula)]
+        Q[(consultas)]
+        R[(respuestas_consultas)]
     end
 
     A --> C
@@ -45,6 +47,8 @@ graph TB
     F --> N
     F --> O
     F --> P
+    F --> Q
+    F --> R
     H -.-> G
 ```
 
@@ -60,12 +64,19 @@ erDiagram
     usuarios ||--o{ hojas_aula : crea
     usuarios ||--o{ contenido_aulas : crea
     usuarios ||--o{ archivos_aula : sube
+    usuarios ||--o{ consultas : crea
+    usuarios ||--o{ respuestas_consultas : responde
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
     aulas ||--o{ hojas_aula : contiene
     aulas ||--o{ archivos_aula : contiene
+    aulas ||--o{ consultas : contiene
+    consultas ||--o{ respuestas_consultas : tiene
     hojas_aula ||--o{ contenido_aulas : organiza
     hojas_aula ||--o{ archivos_aula : organiza
+    hojas_aula ||--o{ consultas : referencia
+    contenido_aulas ||--o{ consultas : referencia
+    archivos_aula ||--o{ consultas : referencia
 
     usuarios {
         uuid id PK
@@ -155,6 +166,30 @@ erDiagram
         boolean visible
         uuid subido_por FK
         timestamp fecha_subida
+        timestamp fecha_actualizacion
+    }
+
+    consultas {
+        uuid id PK
+        uuid aula_id FK
+        uuid hoja_id FK
+        uuid bloque_id FK
+        uuid archivo_id FK
+        uuid creado_por FK
+        varchar titulo
+        text pregunta
+        boolean publica
+        boolean resuelta
+        timestamp fecha_creacion
+        timestamp fecha_actualizacion
+    }
+
+    respuestas_consultas {
+        uuid id PK
+        uuid consulta_id FK
+        uuid respondido_por FK
+        text respuesta
+        timestamp fecha_creacion
         timestamp fecha_actualizacion
     }
 ```
@@ -272,6 +307,7 @@ AulaVirtual/
 │   │   │   ├── archivosController.js
 │   │   │   ├── authController.js
 │   │   │   ├── aulasController.js
+│   │   │   ├── consultasController.js
 │   │   │   ├── contenidoController.js
 │   │   │   ├── hojasController.js
 │   │   │   ├── matriculacionController.js
@@ -282,6 +318,7 @@ AulaVirtual/
 │   │   │   ├── archivosRoutes.js
 │   │   │   ├── authRoutes.js
 │   │   │   ├── aulasRoutes.js
+│   │   │   ├── consultasRoutes.js
 │   │   │   ├── contenidoRoutes.js
 │   │   │   ├── hojasRoutes.js
 │   │   │   ├── matriculacionRoutes.js
@@ -334,8 +371,9 @@ AulaVirtual/
 │   └── package.json
 │
 └── context/          # Scripts y contexto de base de datos
-    ├── init.sql              # Script de inicialización de BD
-    └── usuarios_prueba.sql   # Script de usuarios de prueba
+    ├── init.sql                    # Script de inicialización de BD
+    ├── migration_consultas.sql     # Script de migración para consultas
+    └── usuarios_prueba.sql         # Script de usuarios de prueba
 ```
 
 ## Requisitos Previos
@@ -359,13 +397,14 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
 - Tipos de bloques de contenido: titulo, subtitulo, parrafo, lista, enlace, separador
 - Sistema de hojas/pestañas para organizar contenido
 - Sistema de archivos con límite de 100 MB por archivo
+- Sistema de consultas públicas y privadas con respuestas
 
 ### Usuarios de Prueba
 
@@ -497,6 +536,9 @@ npm run preview
 - ✅ Ocultar/mostrar archivos individuales para estudiantes
 - ✅ Eliminar archivos subidos
 - ✅ Límite de 100 MB por archivo
+- ✅ Crear consultas públicas y privadas
+- ✅ Responder consultas de estudiantes
+- ✅ Eliminar consultas y respuestas
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -508,6 +550,10 @@ npm run preview
 - ✅ Entrar al aula y ver su contenido
 - ✅ Visualizar todos los bloques de contenido del aula
 - ✅ Descargar archivos compartidos por profesores
+- ✅ Crear consultas públicas (todos ven) o privadas (solo profesores)
+- ✅ Responder consultas públicas
+- ✅ Marcar propias consultas como resueltas
+- ✅ Eliminar propias consultas y respuestas
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -996,3 +1042,142 @@ Desarrollado por Angel Nicolas Magro
 ## Licencia
 
 Este proyecto es privado y está bajo desarrollo.
+
+### Consultas de Aulas
+
+Requieren header: `Authorization: Bearer <token>`
+
+**POST** `/api/consultas`
+- Crear una nueva consulta
+- Acceso: Estudiantes y profesores del aula
+- Body: `{ aula_id, titulo, pregunta, publica, hoja_id?, bloque_id?, archivo_id? }`
+- `publica`: true = pública (todos ven), false = privada (solo profesores)
+- Referencias opcionales a hojas, bloques o archivos
+- Respuesta: `{ success, message, data: consulta }`
+
+**GET** `/api/consultas/aula/:aula_id`
+- Obtener todas las consultas de un aula
+- Acceso: Profesores y estudiantes del aula
+- Filtrado automático: estudiantes solo ven consultas públicas + sus propias privadas
+- Respuesta: `{ success, data: [...consultas] }`
+
+**GET** `/api/consultas/:consulta_id`
+- Obtener detalle de una consulta con todas sus respuestas
+- Acceso: Profesores, estudiantes del aula (si es pública o propia)
+- Respuesta: `{ success, data: { consulta, respuestas: [...] } }`
+
+**POST** `/api/consultas/:consulta_id/respuestas`
+- Crear una respuesta a una consulta
+- Body: `{ respuesta }`
+- Acceso: Consultas públicas (todos), consultas privadas (solo profesores)
+- Respuesta: `{ success, message, data: respuesta }`
+
+**PUT** `/api/consultas/:consulta_id/resuelta`
+- Marcar consulta como resuelta/pendiente (toggle)
+- Acceso: Solo el creador de la consulta
+- Respuesta: `{ success, message, data: consulta }`
+
+**DELETE** `/api/consultas/:consulta_id`
+- Eliminar una consulta y todas sus respuestas
+- Acceso: Creador de la consulta o profesores del aula
+- Respuesta: `{ success, message }`
+
+**DELETE** `/api/consultas/respuestas/:respuesta_id`
+- Eliminar una respuesta específica
+- Acceso: Autor de la respuesta o profesores del aula
+- Respuesta: `{ success, message }`
+
+## Sistema de Consultas
+
+El sistema de consultas permite la comunicación bidireccional entre estudiantes y profesores, facilitando el aprendizaje colaborativo.
+
+### Características Principales
+
+**Tipos de Consultas:**
+- **Públicas**: Todos los usuarios del aula pueden ver y responder
+- **Privadas**: Solo profesores y el creador pueden ver; solo profesores pueden responder
+
+**Control de Estado:**
+- El creador puede marcar su consulta como "resuelta"
+- Filtros disponibles: todas, públicas, privadas, resueltas, pendientes
+
+**Referencias Opcionales:**
+- Las consultas pueden referenciar hojas, bloques de contenido o archivos específicos
+- Útil para hacer preguntas contextuales sobre material del aula
+
+**Múltiples Respuestas:**
+- Sistema de thread/foro: múltiples usuarios pueden responder
+- Respuestas ordenadas cronológicamente
+- Contador de respuestas visible en la lista
+
+### Uso para Estudiantes
+
+**Crear Consulta:**
+1. Entrar al aula
+2. Ir a la sección "Consultas"
+3. Click en "Nueva Consulta"
+4. Escribir título y pregunta
+5. Elegir visibilidad (pública o privada)
+6. Crear la consulta
+
+**Responder:**
+- Ver consultas públicas de todos
+- Ver solo propias consultas privadas
+- Responder a consultas públicas
+- Marcar propias consultas como resueltas
+
+### Uso para Profesores
+
+**Gestionar Consultas:**
+- Ver todas las consultas (públicas y privadas)
+- Responder cualquier consulta (públicas y privadas)
+- Eliminar consultas inapropiadas
+- Eliminar respuestas inapropiadas
+
+**Consultas Privadas:**
+- Los estudiantes pueden hacer consultas privadas para preguntas sensibles
+- Solo profesores y el estudiante que creó la consulta pueden verla
+- Solo profesores pueden responder
+
+### Indicadores Visuales
+
+**Iconos:**
+- Globo (azul): Consulta pública
+- Candado (naranja): Consulta privada
+- CheckCircle (verde): Consulta resuelta
+- Circle (gris): Consulta pendiente
+
+**Contador de Respuestas:**
+- Se muestra en cada consulta de la lista
+- Se actualiza automáticamente al agregar/eliminar respuestas
+
+**Botón Marcar como Resuelta:**
+- Visible en tarjetas de consultas propias
+- Toggle rápido entre resuelta/pendiente
+- También disponible dentro del modal de detalle
+
+### Casos de Uso
+
+**Ejemplo 1: Duda sobre Ejercicio**
+```
+1. Estudiante crea consulta pública: "¿Cómo resolver el ejercicio 3?"
+2. Otros estudiantes pueden ver y responder
+3. Profesor puede dar la respuesta definitiva
+4. Estudiante marca como resuelta cuando entiende
+```
+
+**Ejemplo 2: Consulta Personal**
+```
+1. Estudiante crea consulta privada: "Tengo problemas con las entregas"
+2. Solo profesores ven la consulta
+3. Profesor responde en privado
+4. Estudiante marca como resuelta
+```
+
+**Ejemplo 3: Foro de Discusión**
+```
+1. Profesor crea consulta pública: "¿Qué opinan sobre el tema X?"
+2. Múltiples estudiantes participan con respuestas
+3. Se genera una discusión enriquecedora
+4. Queda registrada para futura referencia
+```
