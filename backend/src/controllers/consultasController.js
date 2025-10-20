@@ -1,5 +1,52 @@
 const db = require('../config/database');
 const { validationResult } = require('express-validator');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
+const { v4: uuidv4 } = require('uuid');
+
+// Configuración de multer para imágenes
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadsDir = path.join(__dirname, '../../uploads/consultas');
+    try {
+      await fs.mkdir(uploadsDir, { recursive: true });
+      cb(null, uploadsDir);
+    } catch (error) {
+      cb(error);
+    }
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${uuidv4()}${ext}`;
+    cb(null, uniqueName);
+  },
+});
+
+// Filtro para validar tipos de imagen permitidos
+const imageFilter = (req, file, cb) => {
+  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Tipo de imagen no permitido: ${file.mimetype}`), false);
+  }
+};
+
+// Configuración de multer para imágenes
+const uploadImage = multer({
+  storage: storage,
+  fileFilter: imageFilter,
+  limits: {
+    fileSize: 10485760, // 10 MB
+  },
+});
+
+/**
+ * Middleware de multer para subir una imagen
+ */
+const subirImagenMiddleware = uploadImage.single('imagen');
 
 /**
  * Crear una nueva consulta
@@ -200,9 +247,23 @@ const obtenerConsultasAula = async (req, res) => {
 
     const resultado = await db.query(query, params);
 
+    // Obtener imágenes para cada consulta
+    const consultasConImagenes = await Promise.all(
+      resultado.rows.map(async (consulta) => {
+        const imagenes = await db.query(
+          'SELECT id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, fecha_subida FROM imagenes_consultas WHERE consulta_id = $1',
+          [consulta.id]
+        );
+        return {
+          ...consulta,
+          imagenes: imagenes.rows,
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
-      data: resultado.rows,
+      data: consultasConImagenes,
     });
   } catch (error) {
     console.error('Error al obtener consultas:', error);
@@ -283,6 +344,12 @@ const obtenerConsultaDetalle = async (req, res) => {
       });
     }
 
+    // Obtener imágenes de la consulta
+    const imagenesConsulta = await db.query(
+      'SELECT id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, fecha_subida FROM imagenes_consultas WHERE consulta_id = $1',
+      [consulta_id]
+    );
+
     // Obtener respuestas
     const respuestas = await db.query(
       `SELECT
@@ -296,11 +363,28 @@ const obtenerConsultaDetalle = async (req, res) => {
       [consulta_id]
     );
 
+    // Obtener imágenes para cada respuesta
+    const respuestasConImagenes = await Promise.all(
+      respuestas.rows.map(async (respuesta) => {
+        const imagenesRespuesta = await db.query(
+          'SELECT id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, fecha_subida FROM imagenes_consultas WHERE respuesta_id = $1',
+          [respuesta.id]
+        );
+        return {
+          ...respuesta,
+          imagenes: imagenesRespuesta.rows,
+        };
+      })
+    );
+
     res.status(200).json({
       success: true,
       data: {
-        consulta: consultaData,
-        respuestas: respuestas.rows,
+        consulta: {
+          ...consultaData,
+          imagenes: imagenesConsulta.rows,
+        },
+        respuestas: respuestasConImagenes,
       },
     });
   } catch (error) {
@@ -628,7 +712,286 @@ const eliminarRespuesta = async (req, res) => {
   }
 };
 
+/**
+ * Subir imagen a una consulta
+ * POST /api/consultas/:consulta_id/imagenes
+ * Body: FormData con imagen
+ * Solo el creador de la consulta puede subir imágenes
+ */
+const subirImagenConsulta = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { consulta_id } = req.params;
+  const usuario_id = req.usuario.id;
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'No se proporcionó ninguna imagen',
+    });
+  }
+
+  try {
+    // Obtener la consulta
+    const consulta = await db.query('SELECT * FROM consultas WHERE id = $1', [consulta_id]);
+
+    if (consulta.rows.length === 0) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(404).json({
+        success: false,
+        message: 'Consulta no encontrada',
+      });
+    }
+
+    const consultaData = consulta.rows[0];
+
+    // Verificar que el usuario es el creador de la consulta
+    if (consultaData.creado_por !== usuario_id) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(403).json({
+        success: false,
+        message: 'Solo el creador de la consulta puede subir imágenes',
+      });
+    }
+
+    // Insertar registro en la base de datos
+    const resultado = await db.query(
+      `INSERT INTO imagenes_consultas
+       (consulta_id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, subido_por)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        consulta_id,
+        req.file.originalname,
+        req.file.filename,
+        req.file.mimetype,
+        req.file.size,
+        usuario_id,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Imagen subida exitosamente',
+      data: resultado.rows[0],
+    });
+  } catch (error) {
+    console.error('Error al subir imagen:', error);
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Error al subir la imagen',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Subir imagen a una respuesta
+ * POST /api/consultas/respuestas/:respuesta_id/imagenes
+ * Body: FormData con imagen
+ * Solo el autor de la respuesta puede subir imágenes
+ */
+const subirImagenRespuesta = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { respuesta_id } = req.params;
+  const usuario_id = req.usuario.id;
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'No se proporcionó ninguna imagen',
+    });
+  }
+
+  try {
+    // Obtener la respuesta
+    const respuesta = await db.query(
+      'SELECT * FROM respuestas_consultas WHERE id = $1',
+      [respuesta_id]
+    );
+
+    if (respuesta.rows.length === 0) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(404).json({
+        success: false,
+        message: 'Respuesta no encontrada',
+      });
+    }
+
+    const respuestaData = respuesta.rows[0];
+
+    // Verificar que el usuario es el autor de la respuesta
+    if (respuestaData.respondido_por !== usuario_id) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(403).json({
+        success: false,
+        message: 'Solo el autor de la respuesta puede subir imágenes',
+      });
+    }
+
+    // Insertar registro en la base de datos
+    const resultado = await db.query(
+      `INSERT INTO imagenes_consultas
+       (respuesta_id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, subido_por)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        respuesta_id,
+        req.file.originalname,
+        req.file.filename,
+        req.file.mimetype,
+        req.file.size,
+        usuario_id,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Imagen subida exitosamente',
+      data: resultado.rows[0],
+    });
+  } catch (error) {
+    console.error('Error al subir imagen:', error);
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Error al subir la imagen',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Eliminar una imagen
+ * DELETE /api/consultas/imagenes/:imagen_id
+ * Solo el que subió la imagen puede eliminarla
+ */
+const eliminarImagen = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { imagen_id } = req.params;
+  const usuario_id = req.usuario.id;
+  const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
+
+  try {
+    // Obtener información de la imagen
+    const imagen = await db.query(
+      'SELECT * FROM imagenes_consultas WHERE id = $1',
+      [imagen_id]
+    );
+
+    if (imagen.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Imagen no encontrada',
+      });
+    }
+
+    const imagenData = imagen.rows[0];
+
+    // Verificar permisos
+    let puedeEliminar = false;
+
+    if (rol_activo === 'admin') {
+      puedeEliminar = true;
+    } else if (imagenData.subido_por === usuario_id) {
+      // El que subió la imagen puede eliminarla
+      puedeEliminar = true;
+    } else if (rol_activo === 'profesor') {
+      // Profesores del aula pueden eliminar imágenes
+      // Primero necesitamos obtener el aula_id
+      let aula_id;
+      if (imagenData.consulta_id) {
+        const consulta = await db.query(
+          'SELECT aula_id FROM consultas WHERE id = $1',
+          [imagenData.consulta_id]
+        );
+        aula_id = consulta.rows[0]?.aula_id;
+      } else if (imagenData.respuesta_id) {
+        const respuesta = await db.query(
+          `SELECT c.aula_id
+           FROM respuestas_consultas r
+           JOIN consultas c ON r.consulta_id = c.id
+           WHERE r.id = $1`,
+          [imagenData.respuesta_id]
+        );
+        aula_id = respuesta.rows[0]?.aula_id;
+      }
+
+      if (aula_id) {
+        const esProfesor = await db.query(
+          'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+          [aula_id, usuario_id]
+        );
+        puedeEliminar = esProfesor.rows.length > 0;
+      }
+    }
+
+    if (!puedeEliminar) {
+      return res.status(403).json({
+        success: false,
+        message: 'No tienes permiso para eliminar esta imagen',
+      });
+    }
+
+    // Eliminar archivo físico
+    const filePath = path.join(__dirname, '../../uploads/consultas', imagenData.nombre_archivo);
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      console.error('Error al eliminar archivo físico:', error);
+      // Continuar con eliminación en BD aunque falle eliminación física
+    }
+
+    // Eliminar registro de la base de datos
+    await db.query('DELETE FROM imagenes_consultas WHERE id = $1', [imagen_id]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Imagen eliminada exitosamente',
+    });
+  } catch (error) {
+    console.error('Error al eliminar imagen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar la imagen',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
+  subirImagenMiddleware,
   crearConsulta,
   obtenerConsultasAula,
   obtenerConsultaDetalle,
@@ -636,4 +999,7 @@ module.exports = {
   marcarComoResuelta,
   eliminarConsulta,
   eliminarRespuesta,
+  subirImagenConsulta,
+  subirImagenRespuesta,
+  eliminarImagen,
 };

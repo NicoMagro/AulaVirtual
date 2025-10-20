@@ -13,6 +13,7 @@ import {
   AlertCircle,
   ChevronRight,
   User,
+  Image,
 } from 'lucide-react';
 import consultasService from '../../services/consultasService';
 
@@ -44,10 +45,12 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
     publica: true,
   });
   const [creando, setCreando] = useState(false);
+  const [imagenesConsulta, setImagenesConsulta] = useState([]);
 
   // Estado para responder
   const [nuevaRespuesta, setNuevaRespuesta] = useState('');
   const [respondiendo, setRespondiendo] = useState(false);
+  const [imagenesRespuesta, setImagenesRespuesta] = useState([]);
 
   const cargarConsultas = async () => {
     try {
@@ -79,16 +82,24 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
 
     try {
       setCreando(true);
-      await consultasService.crearConsulta({
+      const response = await consultasService.crearConsulta({
         aula_id,
         titulo: nuevaConsulta.titulo,
         pregunta: nuevaConsulta.pregunta,
         publica: nuevaConsulta.publica,
       });
 
+      // Subir imágenes si hay
+      if (imagenesConsulta.length > 0) {
+        for (const imagen of imagenesConsulta) {
+          await consultasService.subirImagenConsulta(response.data.id, imagen);
+        }
+      }
+
       await cargarConsultas();
       setModalCrear(false);
       setNuevaConsulta({ titulo: '', pregunta: '', publica: true });
+      setImagenesConsulta([]);
     } catch (err) {
       console.error('Error al crear consulta:', err);
       alert(err.response?.data?.message || 'Error al crear la consulta');
@@ -119,12 +130,20 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
 
     try {
       setRespondiendo(true);
-      await consultasService.crearRespuesta(consultaSeleccionada.id, nuevaRespuesta);
+      const respuestaCreada = await consultasService.crearRespuesta(consultaSeleccionada.id, nuevaRespuesta);
+
+      // Subir imágenes si hay
+      if (imagenesRespuesta.length > 0) {
+        for (const imagen of imagenesRespuesta) {
+          await consultasService.subirImagenRespuesta(respuestaCreada.data.id, imagen);
+        }
+      }
 
       // Recargar respuestas
       const response = await consultasService.obtenerConsultaDetalle(consultaSeleccionada.id);
       setRespuestas(response.data.respuestas);
       setNuevaRespuesta('');
+      setImagenesRespuesta([]);
 
       // Recargar lista de consultas para actualizar el contador
       await cargarConsultas();
@@ -188,6 +207,44 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
     } catch (err) {
       console.error('Error al eliminar respuesta:', err);
       alert('Error al eliminar la respuesta');
+    }
+  };
+
+  const handleSeleccionarImagenesConsulta = (e) => {
+    const archivos = Array.from(e.target.files);
+    setImagenesConsulta((prev) => [...prev, ...archivos]);
+  };
+
+  const handleEliminarImagenConsulta = (index) => {
+    setImagenesConsulta((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSeleccionarImagenesRespuesta = (e) => {
+    const archivos = Array.from(e.target.files);
+    setImagenesRespuesta((prev) => [...prev, ...archivos]);
+  };
+
+  const handleEliminarImagenRespuesta = (index) => {
+    setImagenesRespuesta((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEliminarImagenSubida = async (imagen_id) => {
+    if (!window.confirm('¿Estás seguro de eliminar esta imagen?')) {
+      return;
+    }
+
+    try {
+      await consultasService.eliminarImagen(imagen_id);
+      // Recargar datos
+      if (modalDetalle && consultaSeleccionada) {
+        const response = await consultasService.obtenerConsultaDetalle(consultaSeleccionada.id);
+        setConsultaSeleccionada(response.data.consulta);
+        setRespuestas(response.data.respuestas);
+      }
+      await cargarConsultas();
+    } catch (err) {
+      console.error('Error al eliminar imagen:', err);
+      alert('Error al eliminar la imagen');
     }
   };
 
@@ -400,6 +457,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                 onClick={() => {
                   setModalCrear(false);
                   setNuevaConsulta({ titulo: '', pregunta: '', publica: true });
+                  setImagenesConsulta([]);
                 }}
                 className="p-1 hover:bg-gray-100 rounded transition-colors"
               >
@@ -479,6 +537,40 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                 </div>
               </div>
 
+              {/* Imágenes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Imágenes (opcional)
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleSeleccionarImagenesConsulta}
+                  className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                />
+                {imagenesConsulta.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {imagenesConsulta.map((img, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={URL.createObjectURL(img)}
+                          alt={`Preview ${index + 1}`}
+                          className="h-20 w-20 object-cover rounded border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarImagenConsulta(index)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {/* Botones */}
               <div className="flex justify-end gap-2 pt-4">
                 <button
@@ -547,6 +639,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                   setConsultaSeleccionada(null);
                   setRespuestas([]);
                   setNuevaRespuesta('');
+                  setImagenesRespuesta([]);
                 }}
                 className="p-1 hover:bg-gray-100 rounded transition-colors"
               >
@@ -559,6 +652,30 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
               {/* Pregunta original */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <p className="text-gray-800 whitespace-pre-wrap">{consultaSeleccionada.pregunta}</p>
+                {/* Imágenes de la consulta */}
+                {consultaSeleccionada.imagenes && consultaSeleccionada.imagenes.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {consultaSeleccionada.imagenes.map((imagen) => (
+                      <div key={imagen.id} className="relative group">
+                        <img
+                          src={consultasService.obtenerUrlImagen(imagen.nombre_archivo)}
+                          alt={imagen.nombre_original}
+                          className="h-32 w-32 object-cover rounded border cursor-pointer hover:opacity-90"
+                          onClick={() => window.open(consultasService.obtenerUrlImagen(imagen.nombre_archivo), '_blank')}
+                        />
+                        {(usuario?.id === consultaSeleccionada.creado_por || esProfesor) && (
+                          <button
+                            onClick={() => handleEliminarImagenSubida(imagen.id)}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Eliminar imagen"
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Acciones */}
@@ -634,6 +751,30 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                           )}
                         </div>
                         <p className="text-gray-800 whitespace-pre-wrap">{respuesta.respuesta}</p>
+                        {/* Imágenes de la respuesta */}
+                        {respuesta.imagenes && respuesta.imagenes.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {respuesta.imagenes.map((imagen) => (
+                              <div key={imagen.id} className="relative group">
+                                <img
+                                  src={consultasService.obtenerUrlImagen(imagen.nombre_archivo)}
+                                  alt={imagen.nombre_original}
+                                  className="h-24 w-24 object-cover rounded border cursor-pointer hover:opacity-90"
+                                  onClick={() => window.open(consultasService.obtenerUrlImagen(imagen.nombre_archivo), '_blank')}
+                                />
+                                {(usuario?.id === respuesta.respondido_por || esProfesor) && (
+                                  <button
+                                    onClick={() => handleEliminarImagenSubida(imagen.id)}
+                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Eliminar imagen"
+                                  >
+                                    <X size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -653,6 +794,36 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                     placeholder="Escribe tu respuesta..."
                     required
                   />
+                  {/* Imágenes respuesta */}
+                  <div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleSeleccionarImagenesRespuesta}
+                      className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                    />
+                    {imagenesRespuesta.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {imagenesRespuesta.map((img, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={URL.createObjectURL(img)}
+                              alt={`Preview ${index + 1}`}
+                              className="h-16 w-16 object-cover rounded border"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleEliminarImagenRespuesta(index)}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex justify-end">
                     <button
                       type="submit"

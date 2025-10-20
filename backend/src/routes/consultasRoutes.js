@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, param } = require('express-validator');
 const { autenticar } = require('../middlewares/auth');
 const {
+  subirImagenMiddleware,
   crearConsulta,
   obtenerConsultasAula,
   obtenerConsultaDetalle,
@@ -10,6 +11,9 @@ const {
   marcarComoResuelta,
   eliminarConsulta,
   eliminarRespuesta,
+  subirImagenConsulta,
+  subirImagenRespuesta,
+  eliminarImagen,
 } = require('../controllers/consultasController');
 
 /**
@@ -71,19 +75,69 @@ router.get(
 );
 
 /**
- * GET /api/consultas/:consulta_id
- * Obtener detalle de una consulta con sus respuestas
- * Accesible por profesores y estudiantes del aula
+ * DELETE /api/consultas/respuestas/:respuesta_id
+ * Eliminar una respuesta
+ * Solo el autor de la respuesta o profesores del aula pueden eliminar
  */
-router.get(
-  '/:consulta_id',
+router.delete(
+  '/respuestas/:respuesta_id',
   autenticar,
+  [
+    param('respuesta_id')
+      .isUUID()
+      .withMessage('ID de respuesta inválido'),
+  ],
+  eliminarRespuesta
+);
+
+/**
+ * POST /api/consultas/respuestas/:respuesta_id/imagenes
+ * Subir una imagen a una respuesta
+ * Solo el autor de la respuesta puede subir imágenes
+ */
+router.post(
+  '/respuestas/:respuesta_id/imagenes',
+  autenticar,
+  subirImagenMiddleware,
+  [
+    param('respuesta_id')
+      .isUUID()
+      .withMessage('ID de respuesta inválido'),
+  ],
+  subirImagenRespuesta
+);
+
+/**
+ * DELETE /api/consultas/imagenes/:imagen_id
+ * Eliminar una imagen
+ * Solo el que subió la imagen o profesores del aula pueden eliminar
+ */
+router.delete(
+  '/imagenes/:imagen_id',
+  autenticar,
+  [
+    param('imagen_id')
+      .isUUID()
+      .withMessage('ID de imagen inválido'),
+  ],
+  eliminarImagen
+);
+
+/**
+ * POST /api/consultas/:consulta_id/imagenes
+ * Subir una imagen a una consulta
+ * Solo el creador de la consulta puede subir imágenes
+ */
+router.post(
+  '/:consulta_id/imagenes',
+  autenticar,
+  subirImagenMiddleware,
   [
     param('consulta_id')
       .isUUID()
       .withMessage('ID de consulta inválido'),
   ],
-  obtenerConsultaDetalle
+  subirImagenConsulta
 );
 
 /**
@@ -124,6 +178,22 @@ router.put(
 );
 
 /**
+ * GET /api/consultas/:consulta_id
+ * Obtener detalle de una consulta con sus respuestas
+ * Accesible por profesores y estudiantes del aula
+ */
+router.get(
+  '/:consulta_id',
+  autenticar,
+  [
+    param('consulta_id')
+      .isUUID()
+      .withMessage('ID de consulta inválido'),
+  ],
+  obtenerConsultaDetalle
+);
+
+/**
  * DELETE /api/consultas/:consulta_id
  * Eliminar una consulta
  * Solo el creador o profesores del aula pueden eliminar
@@ -137,22 +207,6 @@ router.delete(
       .withMessage('ID de consulta inválido'),
   ],
   eliminarConsulta
-);
-
-/**
- * DELETE /api/consultas/respuestas/:respuesta_id
- * Eliminar una respuesta
- * Solo el autor de la respuesta o profesores del aula pueden eliminar
- */
-router.delete(
-  '/respuestas/:respuesta_id',
-  autenticar,
-  [
-    param('respuesta_id')
-      .isUUID()
-      .withMessage('ID de respuesta inválido'),
-  ],
-  eliminarRespuesta
 );
 
 module.exports = router;

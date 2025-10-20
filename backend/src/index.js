@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
 const db = require('./config/database');
@@ -21,6 +22,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Servir archivos estáticos (uploads) - DEBE ir antes de las rutas
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Middleware para logging de requests
 app.use((req, res, next) => {

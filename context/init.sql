@@ -369,13 +369,54 @@ COMMENT ON TABLE respuestas_consultas IS 'Respuestas a las consultas de estudian
 COMMENT ON COLUMN respuestas_consultas.respuesta IS 'Texto de la respuesta';
 
 -- ============================================
+-- Tabla: imagenes_consultas
+-- Almacena imágenes adjuntas a consultas y respuestas
+-- ============================================
+CREATE TABLE imagenes_consultas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    consulta_id UUID REFERENCES consultas(id) ON DELETE CASCADE,
+    respuesta_id UUID REFERENCES respuestas_consultas(id) ON DELETE CASCADE,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamano_bytes BIGINT NOT NULL,
+    subido_por UUID REFERENCES usuarios(id) ON DELETE SET NULL NOT NULL,
+    fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT tamano_positivo_imagen CHECK (tamano_bytes > 0),
+    CONSTRAINT tamano_maximo_imagen CHECK (tamano_bytes <= 10485760), -- 10MB máximo
+    CONSTRAINT tipo_mime_imagen CHECK (tipo_mime IN ('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp')),
+    CONSTRAINT una_referencia CHECK (
+        (consulta_id IS NOT NULL AND respuesta_id IS NULL) OR
+        (consulta_id IS NULL AND respuesta_id IS NOT NULL)
+    )
+);
+
+-- ============================================
+-- Índices para imagenes_consultas
+-- ============================================
+CREATE INDEX idx_imagenes_consultas_consulta ON imagenes_consultas(consulta_id);
+CREATE INDEX idx_imagenes_consultas_respuesta ON imagenes_consultas(respuesta_id);
+CREATE INDEX idx_imagenes_consultas_subido_por ON imagenes_consultas(subido_por);
+
+-- ============================================
+-- Comentarios para imagenes_consultas
+-- ============================================
+COMMENT ON TABLE imagenes_consultas IS 'Imágenes adjuntas a consultas y respuestas';
+COMMENT ON COLUMN imagenes_consultas.consulta_id IS 'ID de consulta (NULL si es imagen de respuesta)';
+COMMENT ON COLUMN imagenes_consultas.respuesta_id IS 'ID de respuesta (NULL si es imagen de consulta)';
+COMMENT ON COLUMN imagenes_consultas.nombre_original IS 'Nombre original de la imagen al subirla';
+COMMENT ON COLUMN imagenes_consultas.nombre_archivo IS 'Nombre único de la imagen en el servidor (UUID)';
+COMMENT ON COLUMN imagenes_consultas.tipo_mime IS 'Tipo MIME de la imagen (image/jpeg, image/png, etc.)';
+COMMENT ON COLUMN imagenes_consultas.tamano_bytes IS 'Tamaño de la imagen en bytes (máximo 10MB)';
+
+-- ============================================
 -- Mensaje de confirmación
 -- ============================================
 DO $$
 BEGIN
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Base de datos AulaVirtual creada exitosamente';
-    RAISE NOTICE 'Tablas creadas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas';
+    RAISE NOTICE 'Tablas creadas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas';
     RAISE NOTICE 'Roles insertados: admin, profesor, estudiante';
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Sistema de hojas por aula:';

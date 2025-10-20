@@ -67,6 +67,52 @@ const consultasService = {
     const response = await api.delete(`/consultas/respuestas/${respuesta_id}`);
     return response.data;
   },
+
+  /**
+   * Subir imagen a una consulta
+   * Solo el creador de la consulta puede subir imágenes
+   */
+  subirImagenConsulta: async (consulta_id, imagenFile) => {
+    const formData = new FormData();
+    formData.append('imagen', imagenFile);
+    const response = await api.post(`/consultas/${consulta_id}/imagenes`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Subir imagen a una respuesta
+   * Solo el autor de la respuesta puede subir imágenes
+   */
+  subirImagenRespuesta: async (respuesta_id, imagenFile) => {
+    const formData = new FormData();
+    formData.append('imagen', imagenFile);
+    const response = await api.post(`/consultas/respuestas/${respuesta_id}/imagenes`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Eliminar una imagen
+   * Solo el que subió la imagen o profesores pueden eliminar
+   */
+  eliminarImagen: async (imagen_id) => {
+    const response = await api.delete(`/consultas/imagenes/${imagen_id}`);
+    return response.data;
+  },
+
+  /**
+   * Obtener URL de imagen
+   */
+  obtenerUrlImagen: (nombre_archivo) => {
+    return `http://localhost:5001/uploads/consultas/${nombre_archivo}`;
+  },
 };
 
 export default consultasService;

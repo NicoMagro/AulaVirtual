@@ -31,6 +31,7 @@ graph TB
         P[(archivos_aula)]
         Q[(consultas)]
         R[(respuestas_consultas)]
+        S[(imagenes_consultas)]
     end
 
     A --> C
@@ -49,6 +50,7 @@ graph TB
     F --> P
     F --> Q
     F --> R
+    F --> S
     H -.-> G
 ```
 
@@ -66,12 +68,15 @@ erDiagram
     usuarios ||--o{ archivos_aula : sube
     usuarios ||--o{ consultas : crea
     usuarios ||--o{ respuestas_consultas : responde
+    usuarios ||--o{ imagenes_consultas : sube
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
     aulas ||--o{ hojas_aula : contiene
     aulas ||--o{ archivos_aula : contiene
     aulas ||--o{ consultas : contiene
     consultas ||--o{ respuestas_consultas : tiene
+    consultas ||--o{ imagenes_consultas : contiene
+    respuestas_consultas ||--o{ imagenes_consultas : contiene
     hojas_aula ||--o{ contenido_aulas : organiza
     hojas_aula ||--o{ archivos_aula : organiza
     hojas_aula ||--o{ consultas : referencia
@@ -191,6 +196,18 @@ erDiagram
         text respuesta
         timestamp fecha_creacion
         timestamp fecha_actualizacion
+    }
+
+    imagenes_consultas {
+        uuid id PK
+        uuid consulta_id FK
+        uuid respuesta_id FK
+        varchar nombre_original
+        varchar nombre_archivo UK
+        varchar tipo_mime
+        bigint tamano_bytes
+        uuid subido_por FK
+        timestamp fecha_subida
     }
 ```
 
@@ -327,6 +344,8 @@ AulaVirtual/
 │   │   │   └── jwt.js
 │   │   └── index.js          # Punto de entrada del servidor
 │   ├── uploads/          # Archivos subidos por usuarios (no versionado)
+│   │   ├── archivos/     # Archivos de aulas
+│   │   └── consultas/    # Imágenes de consultas y respuestas
 │   └── package.json
 │
 ├── frontend/         # Aplicación React
@@ -363,6 +382,7 @@ AulaVirtual/
 │   │   │   ├── archivosService.js
 │   │   │   ├── authService.js
 │   │   │   ├── aulasService.js
+│   │   │   ├── consultasService.js
 │   │   │   ├── contenidoService.js
 │   │   │   ├── hojasService.js
 │   │   │   ├── matriculacionService.js
@@ -397,14 +417,14 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
 - Tipos de bloques de contenido: titulo, subtitulo, parrafo, lista, enlace, separador
 - Sistema de hojas/pestañas para organizar contenido
 - Sistema de archivos con límite de 100 MB por archivo
-- Sistema de consultas públicas y privadas con respuestas
+- Sistema de consultas públicas y privadas con respuestas e imágenes
 
 ### Usuarios de Prueba
 
@@ -539,6 +559,7 @@ npm run preview
 - ✅ Crear consultas públicas y privadas
 - ✅ Responder consultas de estudiantes
 - ✅ Eliminar consultas y respuestas
+- ✅ Adjuntar imágenes a consultas y respuestas (hasta 10 MB por imagen)
 
 ### Funcionalidades del Estudiante
 - ✅ Explorar aulas disponibles
@@ -554,6 +575,7 @@ npm run preview
 - ✅ Responder consultas públicas
 - ✅ Marcar propias consultas como resueltas
 - ✅ Eliminar propias consultas y respuestas
+- ✅ Adjuntar imágenes a consultas y respuestas (hasta 10 MB por imagen)
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -1087,6 +1109,27 @@ Requieren header: `Authorization: Bearer <token>`
 - Acceso: Autor de la respuesta o profesores del aula
 - Respuesta: `{ success, message }`
 
+**POST** `/api/consultas/:consulta_id/imagenes`
+- Subir una imagen a una consulta
+- Acceso: Solo el creador de la consulta
+- Body: FormData con `imagen`
+- Respuesta: `{ success, message, data: imagen }`
+- Límite: 10 MB por imagen
+- Formatos soportados: JPEG, JPG, PNG, GIF, WebP
+
+**POST** `/api/consultas/respuestas/:respuesta_id/imagenes`
+- Subir una imagen a una respuesta
+- Acceso: Solo el autor de la respuesta
+- Body: FormData con `imagen`
+- Respuesta: `{ success, message, data: imagen }`
+- Límite: 10 MB por imagen
+- Formatos soportados: JPEG, JPG, PNG, GIF, WebP
+
+**DELETE** `/api/consultas/imagenes/:imagen_id`
+- Eliminar una imagen
+- Acceso: El que subió la imagen o profesores del aula
+- Respuesta: `{ success, message }`
+
 ## Sistema de Consultas
 
 El sistema de consultas permite la comunicación bidireccional entre estudiantes y profesores, facilitando el aprendizaje colaborativo.
@@ -1110,6 +1153,20 @@ El sistema de consultas permite la comunicación bidireccional entre estudiantes
 - Respuestas ordenadas cronológicamente
 - Contador de respuestas visible en la lista
 
+**Adjuntar Imágenes:**
+- Los usuarios pueden adjuntar múltiples imágenes a consultas y respuestas
+- Límite: 10 MB por imagen
+- Formatos soportados: JPEG, JPG, PNG, GIF, WebP
+- Vista previa antes de subir con miniaturas
+- Las imágenes se muestran en galería dentro de consultas y respuestas
+- Click en imagen para ver en tamaño completo (nueva pestaña)
+- Eliminación de imágenes:
+  - El creador de la imagen puede eliminarla en cualquier momento
+  - Los profesores del aula pueden eliminar cualquier imagen
+- Almacenamiento en `/backend/uploads/consultas/`
+- Las imágenes se eliminan físicamente del servidor al borrarlas
+- Útil para compartir capturas de pantalla, diagramas, código o material visual
+
 ### Uso para Estudiantes
 
 **Crear Consulta:**
@@ -1118,26 +1175,51 @@ El sistema de consultas permite la comunicación bidireccional entre estudiantes
 3. Click en "Nueva Consulta"
 4. Escribir título y pregunta
 5. Elegir visibilidad (pública o privada)
-6. Crear la consulta
+6. **Adjuntar imágenes (opcional):**
+   - Click en el selector de archivos
+   - Seleccionar una o más imágenes (máx 10 MB cada una)
+   - Ver vista previa de las imágenes seleccionadas
+   - Eliminar imágenes individuales antes de crear si es necesario
+7. Crear la consulta
 
 **Responder:**
 - Ver consultas públicas de todos
 - Ver solo propias consultas privadas
 - Responder a consultas públicas
+- **Adjuntar imágenes a respuestas:**
+  - Mismo proceso que en consultas
+  - Seleccionar múltiples imágenes
+  - Vista previa antes de enviar
+  - Eliminar imágenes de la vista previa si es necesario
 - Marcar propias consultas como resueltas
+- **Ver imágenes:**
+  - Las imágenes aparecen como miniaturas debajo del texto
+  - Click en cualquier imagen para verla en tamaño completo
+  - Se abre en nueva pestaña del navegador
+- **Eliminar imágenes propias:**
+  - Hover sobre la imagen para ver el botón de eliminar
+  - Solo puedes eliminar tus propias imágenes
 
 ### Uso para Profesores
 
 **Gestionar Consultas:**
 - Ver todas las consultas (públicas y privadas)
 - Responder cualquier consulta (públicas y privadas)
+- **Adjuntar imágenes a respuestas:**
+  - Igual que los estudiantes, pueden adjuntar múltiples imágenes
+  - Útil para explicaciones visuales, diagramas, ejemplos
 - Eliminar consultas inapropiadas
 - Eliminar respuestas inapropiadas
+- **Gestionar imágenes:**
+  - Ver todas las imágenes en consultas y respuestas
+  - Eliminar cualquier imagen del aula (control total)
+  - Útil para moderar contenido inapropiado
 
 **Consultas Privadas:**
 - Los estudiantes pueden hacer consultas privadas para preguntas sensibles
 - Solo profesores y el estudiante que creó la consulta pueden verla
 - Solo profesores pueden responder
+- Los profesores pueden adjuntar imágenes en sus respuestas privadas
 
 ### Indicadores Visuales
 
@@ -1180,4 +1262,24 @@ El sistema de consultas permite la comunicación bidireccional entre estudiantes
 2. Múltiples estudiantes participan con respuestas
 3. Se genera una discusión enriquecedora
 4. Queda registrada para futura referencia
+```
+
+**Ejemplo 4: Consulta con Imágenes (Error de Código)**
+```
+1. Estudiante encuentra un error en su código
+2. Crea consulta pública: "Error al ejecutar el programa"
+3. Adjunta captura de pantalla del error
+4. Profesor ve la imagen y entiende el problema
+5. Profesor responde con explicación y adjunta imagen con la solución
+6. Estudiante ve ambas imágenes, compara y resuelve el problema
+7. Estudiante marca como resuelta
+```
+
+**Ejemplo 5: Explicación Visual**
+```
+1. Estudiante pregunta: "No entiendo este diagrama del tema 5"
+2. Adjunta imagen del diagrama con dudas
+3. Profesor responde con imagen anotada señalando las partes importantes
+4. Otros estudiantes también se benefician de la explicación visual
+5. La consulta queda como referencia permanente
 ```
