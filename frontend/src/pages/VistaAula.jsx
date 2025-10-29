@@ -40,6 +40,7 @@ import TabsHojas from '../components/contenido/TabsHojas';
 import ModalGestionarHojas from '../components/contenido/ModalGestionarHojas';
 import ListaArchivos from '../components/contenido/ListaArchivos';
 import ConsultasAula from '../components/consultas/ConsultasAula';
+import EvaluacionesAula from '../components/evaluaciones/EvaluacionesAula';
 
 // Componente para un bloque arrastrable
 const BloqueSortable = ({ bloque, modoEdicion, esProfesor, handleEditarBloque, handleEliminarBloque, handleToggleVisibilidadBloque }) => {
@@ -447,6 +448,14 @@ const VistaAula = () => {
           aula_id={aula_id}
           esProfesor={esProfesor}
           usuario={user}
+        />
+      </div>
+
+      {/* Sección de evaluaciones */}
+      <div className="bg-white rounded-lg shadow-md p-8">
+        <EvaluacionesAula
+          aula_id={aula_id}
+          esProfesor={esProfesor}
         />
       </div>
 

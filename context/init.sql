@@ -410,25 +410,272 @@ COMMENT ON COLUMN imagenes_consultas.tipo_mime IS 'Tipo MIME de la imagen (image
 COMMENT ON COLUMN imagenes_consultas.tamano_bytes IS 'Tamaño de la imagen en bytes (máximo 10MB)';
 
 -- ============================================
+-- SISTEMA DE EVALUACIONES
+-- ============================================
+
+-- ============================================
+-- Tabla: evaluaciones
+-- Almacena las evaluaciones/exámenes de un aula
+-- ============================================
+CREATE TABLE evaluaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    aula_id UUID REFERENCES aulas(id) ON DELETE CASCADE NOT NULL,
+    titulo VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    estado VARCHAR(20) NOT NULL DEFAULT 'borrador',
+    fecha_inicio TIMESTAMP WITH TIME ZONE,
+    fecha_fin TIMESTAMP WITH TIME ZONE,
+    duracion_maxima_minutos INTEGER,
+    intentos_permitidos INTEGER DEFAULT 1,
+    cantidad_preguntas_mostrar INTEGER NOT NULL,
+    orden_aleatorio BOOLEAN DEFAULT false,
+    mostrar_respuestas_correctas BOOLEAN DEFAULT true,
+    nota_minima_aprobacion NUMERIC(4,2) DEFAULT 6.00,
+    creado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    fecha_creacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT estado_valido CHECK (estado IN ('borrador', 'publicado', 'cerrado')),
+    CONSTRAINT intentos_positivos CHECK (intentos_permitidos > 0),
+    CONSTRAINT cantidad_positiva CHECK (cantidad_preguntas_mostrar > 0),
+    CONSTRAINT duracion_positiva CHECK (duracion_maxima_minutos IS NULL OR duracion_maxima_minutos > 0),
+    CONSTRAINT nota_valida CHECK (nota_minima_aprobacion >= 0 AND nota_minima_aprobacion <= 10)
+);
+
+-- ============================================
+-- Tabla: preguntas_banco
+-- Banco de preguntas de una evaluación
+-- ============================================
+CREATE TABLE preguntas_banco (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    evaluacion_id UUID REFERENCES evaluaciones(id) ON DELETE CASCADE NOT NULL,
+    tipo_pregunta VARCHAR(50) NOT NULL,
+    enunciado TEXT NOT NULL,
+    puntaje NUMERIC(5,2) NOT NULL DEFAULT 1.00,
+    orden INTEGER NOT NULL DEFAULT 0,
+    creado_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    fecha_creacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT tipo_pregunta_valido CHECK (tipo_pregunta IN ('multiple_choice', 'verdadero_falso', 'verdadero_falso_justificacion', 'desarrollo')),
+    CONSTRAINT puntaje_positivo CHECK (puntaje > 0),
+    CONSTRAINT orden_positivo_pregunta CHECK (orden >= 0)
+);
+
+-- ============================================
+-- Tabla: opciones_pregunta
+-- Opciones para preguntas de múltiple choice
+-- ============================================
+CREATE TABLE opciones_pregunta (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pregunta_id UUID REFERENCES preguntas_banco(id) ON DELETE CASCADE NOT NULL,
+    texto_opcion TEXT NOT NULL,
+    es_correcta BOOLEAN DEFAULT false,
+    orden INTEGER NOT NULL DEFAULT 0,
+    CONSTRAINT orden_positivo_opcion CHECK (orden >= 0)
+);
+
+-- ============================================
+-- Tabla: respuestas_correctas_vf
+-- Respuestas correctas para preguntas de verdadero/falso
+-- ============================================
+CREATE TABLE respuestas_correctas_vf (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pregunta_id UUID REFERENCES preguntas_banco(id) ON DELETE CASCADE NOT NULL UNIQUE,
+    respuesta_correcta BOOLEAN NOT NULL
+);
+
+-- ============================================
+-- Tabla: intentos_evaluacion
+-- Intentos de los estudiantes en una evaluación
+-- ============================================
+CREATE TABLE intentos_evaluacion (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    evaluacion_id UUID REFERENCES evaluaciones(id) ON DELETE CASCADE NOT NULL,
+    estudiante_id UUID REFERENCES usuarios(id) ON DELETE CASCADE NOT NULL,
+    numero_intento INTEGER NOT NULL,
+    puntaje_total NUMERIC(6,2) NOT NULL,
+    puntaje_obtenido NUMERIC(6,2) DEFAULT 0,
+    nota_obtenida NUMERIC(4,2),
+    estado VARCHAR(20) NOT NULL DEFAULT 'en_progreso',
+    fecha_inicio TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    fecha_entrega TIMESTAMP WITH TIME ZONE,
+    fecha_calificacion TIMESTAMP WITH TIME ZONE,
+    tiempo_usado_minutos INTEGER,
+    CONSTRAINT estado_intento_valido CHECK (estado IN ('en_progreso', 'entregado', 'calificado')),
+    CONSTRAINT numero_intento_positivo CHECK (numero_intento > 0),
+    CONSTRAINT puntaje_total_positivo CHECK (puntaje_total >= 0),
+    CONSTRAINT puntaje_obtenido_valido CHECK (puntaje_obtenido >= 0 AND puntaje_obtenido <= puntaje_total),
+    CONSTRAINT nota_obtenida_valida CHECK (nota_obtenida IS NULL OR (nota_obtenida >= 0 AND nota_obtenida <= 10)),
+    CONSTRAINT tiempo_usado_positivo CHECK (tiempo_usado_minutos IS NULL OR tiempo_usado_minutos > 0),
+    CONSTRAINT intento_unico UNIQUE (evaluacion_id, estudiante_id, numero_intento)
+);
+
+-- ============================================
+-- Tabla: preguntas_intento
+-- Preguntas asignadas a un intento específico
+-- ============================================
+CREATE TABLE preguntas_intento (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    intento_id UUID REFERENCES intentos_evaluacion(id) ON DELETE CASCADE NOT NULL,
+    pregunta_id UUID REFERENCES preguntas_banco(id) ON DELETE CASCADE NOT NULL,
+    orden_mostrado INTEGER NOT NULL,
+    CONSTRAINT orden_mostrado_positivo CHECK (orden_mostrado >= 0),
+    CONSTRAINT pregunta_intento_unico UNIQUE (intento_id, pregunta_id)
+);
+
+-- ============================================
+-- Tabla: respuestas_estudiante
+-- Respuestas del estudiante en un intento
+-- ============================================
+CREATE TABLE respuestas_estudiante (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    intento_id UUID REFERENCES intentos_evaluacion(id) ON DELETE CASCADE NOT NULL,
+    pregunta_id UUID REFERENCES preguntas_banco(id) ON DELETE CASCADE NOT NULL,
+    respuesta_texto TEXT,
+    opcion_seleccionada_id UUID REFERENCES opciones_pregunta(id) ON DELETE SET NULL,
+    respuesta_booleana BOOLEAN,
+    justificacion TEXT,
+    puntaje_obtenido NUMERIC(5,2) DEFAULT 0,
+    es_correcta BOOLEAN,
+    retroalimentacion_profesor TEXT,
+    calificado_por UUID REFERENCES usuarios(id),
+    fecha_calificacion TIMESTAMP WITH TIME ZONE,
+    fecha_respuesta TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT respuesta_unica UNIQUE (intento_id, pregunta_id)
+);
+
+-- ============================================
+-- Tabla: imagenes_respuestas
+-- Imágenes adjuntas a respuestas de estudiantes (para preguntas de desarrollo)
+-- ============================================
+CREATE TABLE imagenes_respuestas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    respuesta_id UUID REFERENCES respuestas_estudiante(id) ON DELETE CASCADE NOT NULL,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamano_bytes BIGINT NOT NULL,
+    fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT tamano_positivo_imagen_respuesta CHECK (tamano_bytes > 0),
+    CONSTRAINT tamano_maximo_imagen_respuesta CHECK (tamano_bytes <= 10485760),
+    CONSTRAINT tipo_mime_imagen_respuesta CHECK (tipo_mime IN ('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'))
+);
+
+-- ============================================
+-- Índices para evaluaciones
+-- ============================================
+CREATE INDEX idx_evaluaciones_aula ON evaluaciones(aula_id);
+CREATE INDEX idx_evaluaciones_estado ON evaluaciones(estado);
+CREATE INDEX idx_evaluaciones_creado_por ON evaluaciones(creado_por);
+CREATE INDEX idx_evaluaciones_fecha_inicio ON evaluaciones(fecha_inicio);
+CREATE INDEX idx_evaluaciones_fecha_fin ON evaluaciones(fecha_fin);
+
+-- ============================================
+-- Índices para preguntas_banco
+-- ============================================
+CREATE INDEX idx_preguntas_banco_evaluacion ON preguntas_banco(evaluacion_id);
+CREATE INDEX idx_preguntas_banco_tipo ON preguntas_banco(tipo_pregunta);
+CREATE INDEX idx_preguntas_banco_orden ON preguntas_banco(evaluacion_id, orden);
+
+-- ============================================
+-- Índices para opciones_pregunta
+-- ============================================
+CREATE INDEX idx_opciones_pregunta_pregunta ON opciones_pregunta(pregunta_id);
+CREATE INDEX idx_opciones_pregunta_correcta ON opciones_pregunta(es_correcta);
+
+-- ============================================
+-- Índices para respuestas_correctas_vf
+-- ============================================
+CREATE INDEX idx_respuestas_vf_pregunta ON respuestas_correctas_vf(pregunta_id);
+
+-- ============================================
+-- Índices para intentos_evaluacion
+-- ============================================
+CREATE INDEX idx_intentos_evaluacion ON intentos_evaluacion(evaluacion_id);
+CREATE INDEX idx_intentos_estudiante ON intentos_evaluacion(estudiante_id);
+CREATE INDEX idx_intentos_estado ON intentos_evaluacion(estado);
+CREATE INDEX idx_intentos_fecha_inicio ON intentos_evaluacion(fecha_inicio);
+
+-- ============================================
+-- Índices para preguntas_intento
+-- ============================================
+CREATE INDEX idx_preguntas_intento_intento ON preguntas_intento(intento_id);
+CREATE INDEX idx_preguntas_intento_pregunta ON preguntas_intento(pregunta_id);
+
+-- ============================================
+-- Índices para respuestas_estudiante
+-- ============================================
+CREATE INDEX idx_respuestas_intento ON respuestas_estudiante(intento_id);
+CREATE INDEX idx_respuestas_pregunta ON respuestas_estudiante(pregunta_id);
+CREATE INDEX idx_respuestas_opcion ON respuestas_estudiante(opcion_seleccionada_id);
+
+-- ============================================
+-- Índices para imagenes_respuestas
+-- ============================================
+CREATE INDEX idx_imagenes_respuestas_respuesta ON imagenes_respuestas(respuesta_id);
+
+-- ============================================
+-- Triggers para actualizar fecha_actualizacion en evaluaciones
+-- ============================================
+CREATE TRIGGER trigger_actualizar_evaluaciones
+    BEFORE UPDATE ON evaluaciones
+    FOR EACH ROW
+    EXECUTE FUNCTION actualizar_fecha_actualizacion();
+
+-- ============================================
+-- Comentarios para tablas de evaluaciones
+-- ============================================
+COMMENT ON TABLE evaluaciones IS 'Evaluaciones/exámenes de un aula';
+COMMENT ON COLUMN evaluaciones.estado IS 'Estado: borrador, publicado, cerrado';
+COMMENT ON COLUMN evaluaciones.intentos_permitidos IS 'Número de intentos permitidos por estudiante';
+COMMENT ON COLUMN evaluaciones.cantidad_preguntas_mostrar IS 'Cantidad de preguntas aleatorias a mostrar del banco';
+COMMENT ON COLUMN evaluaciones.orden_aleatorio IS 'Si true, las preguntas se muestran en orden aleatorio';
+COMMENT ON COLUMN evaluaciones.mostrar_respuestas_correctas IS 'Si true, se muestran respuestas correctas después de calificar';
+COMMENT ON COLUMN evaluaciones.duracion_maxima_minutos IS 'Duración máxima del intento en minutos (NULL = sin límite)';
+
+COMMENT ON TABLE preguntas_banco IS 'Banco de preguntas de una evaluación';
+COMMENT ON COLUMN preguntas_banco.tipo_pregunta IS 'Tipo: multiple_choice, verdadero_falso, verdadero_falso_justificacion, desarrollo';
+
+COMMENT ON TABLE opciones_pregunta IS 'Opciones para preguntas de múltiple choice';
+COMMENT ON COLUMN opciones_pregunta.es_correcta IS 'Indica si esta opción es la respuesta correcta';
+
+COMMENT ON TABLE respuestas_correctas_vf IS 'Respuestas correctas para preguntas de verdadero/falso';
+
+COMMENT ON TABLE intentos_evaluacion IS 'Intentos de estudiantes en evaluaciones';
+COMMENT ON COLUMN intentos_evaluacion.estado IS 'Estado: en_progreso, entregado, calificado';
+COMMENT ON COLUMN intentos_evaluacion.numero_intento IS 'Número secuencial del intento (1, 2, 3...)';
+
+COMMENT ON TABLE preguntas_intento IS 'Preguntas asignadas a un intento específico (subset del banco)';
+COMMENT ON COLUMN preguntas_intento.orden_mostrado IS 'Orden en que se mostraron las preguntas al estudiante';
+
+COMMENT ON TABLE respuestas_estudiante IS 'Respuestas del estudiante en un intento';
+COMMENT ON COLUMN respuestas_estudiante.respuesta_texto IS 'Respuesta de texto libre (para preguntas de desarrollo)';
+COMMENT ON COLUMN respuestas_estudiante.opcion_seleccionada_id IS 'Opción seleccionada (para multiple choice)';
+COMMENT ON COLUMN respuestas_estudiante.respuesta_booleana IS 'Respuesta true/false (para V/F)';
+COMMENT ON COLUMN respuestas_estudiante.justificacion IS 'Justificación del estudiante (para V/F con justificación)';
+COMMENT ON COLUMN respuestas_estudiante.retroalimentacion_profesor IS 'Retroalimentación del profesor al calificar';
+
+COMMENT ON TABLE imagenes_respuestas IS 'Imágenes adjuntas a respuestas de desarrollo';
+
+-- ============================================
 -- Mensaje de confirmación
 -- ============================================
 DO $$
 BEGIN
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Base de datos AulaVirtual creada exitosamente';
-    RAISE NOTICE 'Tablas creadas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas';
+    RAISE NOTICE 'Tablas básicas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes';
+    RAISE NOTICE 'Tablas de contenido: hojas_aula, contenido_aulas, archivos_aula';
+    RAISE NOTICE 'Tablas de consultas: consultas, respuestas_consultas, imagenes_consultas';
+    RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, imagenes_respuestas';
     RAISE NOTICE 'Roles insertados: admin, profesor, estudiante';
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Sistema de hojas por aula:';
     RAISE NOTICE '  - Cada aula puede tener múltiples hojas (como pestañas de Excel)';
     RAISE NOTICE '  - Cada hoja contiene su propio contenido independiente';
     RAISE NOTICE '===========================================';
-    RAISE NOTICE 'Tipos de bloques de contenido soportados:';
-    RAISE NOTICE '  - titulo: Título principal';
-    RAISE NOTICE '  - subtitulo: Subtítulo o encabezado';
-    RAISE NOTICE '  - parrafo: Bloque de texto';
-    RAISE NOTICE '  - lista: Lista de elementos';
-    RAISE NOTICE '  - enlace: Enlace a recurso externo';
-    RAISE NOTICE '  - separador: Línea separadora visual';
+    RAISE NOTICE 'Sistema de evaluaciones:';
+    RAISE NOTICE '  - 4 tipos de preguntas: multiple_choice, verdadero_falso, verdadero_falso_justificacion, desarrollo';
+    RAISE NOTICE '  - Calificación automática para MC y V/F, manual para desarrollo y V/F con justificación';
+    RAISE NOTICE '  - Estados de intento: en_progreso, entregado, calificado';
+    RAISE NOTICE '  - Estados de evaluación: borrador, publicado, cerrado';
     RAISE NOTICE '===========================================';
 END $$;

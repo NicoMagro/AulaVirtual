@@ -12,6 +12,9 @@ const contenidoRoutes = require('./routes/contenidoRoutes');
 const hojasRoutes = require('./routes/hojasRoutes');
 const archivosRoutes = require('./routes/archivosRoutes');
 const consultasRoutes = require('./routes/consultasRoutes');
+const evaluacionesRoutes = require('./routes/evaluacionesRoutes');
+const preguntasRoutes = require('./routes/preguntasRoutes');
+const intentosRoutes = require('./routes/intentosRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -68,6 +71,15 @@ app.use('/api/archivos', archivosRoutes);
 
 // Rutas de consultas
 app.use('/api/consultas', consultasRoutes);
+
+// Rutas de evaluaciones
+app.use('/api/evaluaciones', evaluacionesRoutes);
+
+// Rutas de preguntas
+app.use('/api/preguntas', preguntasRoutes);
+
+// Rutas de intentos
+app.use('/api/intentos', intentosRoutes);
 
 // ============================================
 // Manejo de errores 404

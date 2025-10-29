@@ -1,0 +1,187 @@
+import api from './api';
+
+const evaluacionesService = {
+  // ==========================================
+  // EVALUACIONES
+  // ==========================================
+
+  /**
+   * Crear una nueva evaluación
+   */
+  crear: async (datosEvaluacion) => {
+    const response = await api.post('/evaluaciones', datosEvaluacion);
+    return response.data;
+  },
+
+  /**
+   * Obtener todas las evaluaciones de un aula
+   */
+  obtenerPorAula: async (aulaId) => {
+    const response = await api.get(`/evaluaciones/aula/${aulaId}`);
+    return response.data;
+  },
+
+  /**
+   * Obtener detalle de una evaluación
+   */
+  obtenerDetalle: async (evaluacionId) => {
+    const response = await api.get(`/evaluaciones/${evaluacionId}`);
+    return response.data;
+  },
+
+  /**
+   * Actualizar una evaluación
+   */
+  actualizar: async (evaluacionId, datosActualizados) => {
+    const response = await api.put(`/evaluaciones/${evaluacionId}`, datosActualizados);
+    return response.data;
+  },
+
+  /**
+   * Eliminar una evaluación
+   */
+  eliminar: async (evaluacionId) => {
+    const response = await api.delete(`/evaluaciones/${evaluacionId}`);
+    return response.data;
+  },
+
+  // ==========================================
+  // PREGUNTAS
+  // ==========================================
+
+  /**
+   * Crear una nueva pregunta en el banco
+   */
+  crearPregunta: async (datosPregunta) => {
+    const response = await api.post('/preguntas', datosPregunta);
+    return response.data;
+  },
+
+  /**
+   * Obtener todas las preguntas de una evaluación
+   */
+  obtenerPreguntas: async (evaluacionId) => {
+    const response = await api.get(`/preguntas/evaluacion/${evaluacionId}`);
+    return response.data;
+  },
+
+  /**
+   * Obtener detalle de una pregunta
+   */
+  obtenerPreguntaDetalle: async (preguntaId) => {
+    const response = await api.get(`/preguntas/${preguntaId}`);
+    return response.data;
+  },
+
+  /**
+   * Actualizar una pregunta
+   */
+  actualizarPregunta: async (preguntaId, datosActualizados) => {
+    const response = await api.put(`/preguntas/${preguntaId}`, datosActualizados);
+    return response.data;
+  },
+
+  /**
+   * Eliminar una pregunta
+   */
+  eliminarPregunta: async (preguntaId) => {
+    const response = await api.delete(`/preguntas/${preguntaId}`);
+    return response.data;
+  },
+
+  // ==========================================
+  // INTENTOS
+  // ==========================================
+
+  /**
+   * Iniciar un nuevo intento de evaluación
+   */
+  iniciarIntento: async (evaluacionId) => {
+    const response = await api.post('/intentos/iniciar', {
+      evaluacion_id: evaluacionId,
+    });
+    return response.data;
+  },
+
+  /**
+   * Obtener detalles de un intento
+   */
+  obtenerIntento: async (intentoId) => {
+    const response = await api.get(`/intentos/${intentoId}`);
+    return response.data;
+  },
+
+  /**
+   * Guardar respuesta de una pregunta
+   */
+  guardarRespuesta: async (intentoId, datosRespuesta) => {
+    const response = await api.post(`/intentos/${intentoId}/respuesta`, datosRespuesta);
+    return response.data;
+  },
+
+  /**
+   * Entregar el intento
+   */
+  entregarIntento: async (intentoId) => {
+    const response = await api.post(`/intentos/${intentoId}/entregar`);
+    return response.data;
+  },
+
+  /**
+   * Obtener mis intentos en una evaluación
+   */
+  obtenerMisIntentos: async (evaluacionId) => {
+    const response = await api.get(`/intentos/evaluacion/${evaluacionId}/mis-intentos`);
+    return response.data;
+  },
+
+  // ==========================================
+  // CALIFICACIÓN MANUAL
+  // ==========================================
+
+  /**
+   * Obtener intentos pendientes de calificación de una evaluación
+   */
+  obtenerIntentosPendientes: async (evaluacionId) => {
+    const response = await api.get(`/intentos/evaluacion/${evaluacionId}/pendientes`);
+    return response.data;
+  },
+
+  /**
+   * Obtener intento con todas las respuestas para calificar
+   */
+  obtenerIntentoParaCalificar: async (intentoId) => {
+    const response = await api.get(`/intentos/${intentoId}/calificar`);
+    return response.data;
+  },
+
+  /**
+   * Calificar una respuesta individual
+   */
+  calificarRespuesta: async (intentoId, respuestaId, datosCalificacion) => {
+    const response = await api.put(`/intentos/${intentoId}/respuesta/${respuestaId}/calificar`, datosCalificacion);
+    return response.data;
+  },
+
+  /**
+   * Publicar resultados del intento (recalcular nota y cambiar estado)
+   */
+  publicarResultados: async (intentoId) => {
+    const response = await api.post(`/intentos/${intentoId}/publicar`);
+    return response.data;
+  },
+
+  // ==========================================
+  // ESTADÍSTICAS
+  // ==========================================
+
+  /**
+   * Obtener estadísticas de una evaluación
+   */
+  obtenerEstadisticas: async (evaluacionId) => {
+    const response = await api.get(`/evaluaciones/${evaluacionId}/estadisticas`);
+    return response.data;
+  },
+};
+
+export default evaluacionesService;
