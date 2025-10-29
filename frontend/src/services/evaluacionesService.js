@@ -182,6 +182,72 @@ const evaluacionesService = {
     const response = await api.get(`/evaluaciones/${evaluacionId}/estadisticas`);
     return response.data;
   },
+
+  /**
+   * Exportar estadísticas a Excel
+   */
+  exportarEstadisticasExcel: async (evaluacionId) => {
+    const response = await api.get(`/evaluaciones/${evaluacionId}/exportar-excel`, {
+      responseType: 'blob', // Importante para archivos binarios
+    });
+
+    // Crear un enlace temporal para descargar el archivo
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+
+    // Obtener el nombre del archivo del header Content-Disposition
+    const contentDisposition = response.headers['content-disposition'];
+    let fileName = 'Estadisticas_Evaluacion.xlsx';
+
+    if (contentDisposition) {
+      const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/);
+      if (fileNameMatch && fileNameMatch.length === 2) {
+        fileName = fileNameMatch[1];
+      }
+    }
+
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    return response;
+  },
+
+  /**
+   * Exportar estadísticas a PDF
+   */
+  exportarEstadisticasPDF: async (evaluacionId) => {
+    const response = await api.get(`/evaluaciones/${evaluacionId}/exportar-pdf`, {
+      responseType: 'blob', // Importante para archivos binarios
+    });
+
+    // Crear un enlace temporal para descargar el archivo
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+
+    // Obtener el nombre del archivo del header Content-Disposition
+    const contentDisposition = response.headers['content-disposition'];
+    let fileName = 'Estadisticas_Evaluacion.pdf';
+
+    if (contentDisposition) {
+      const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/);
+      if (fileNameMatch && fileNameMatch.length === 2) {
+        fileName = fileNameMatch[1];
+      }
+    }
+
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+
+    return response;
+  },
 };
 
 export default evaluacionesService;

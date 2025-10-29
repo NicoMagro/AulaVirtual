@@ -10,6 +10,7 @@ import {
   XCircle,
   BarChart3,
   FileQuestion,
+  Download,
 } from 'lucide-react';
 import evaluacionesService from '../../services/evaluacionesService';
 
@@ -17,6 +18,8 @@ const EstadisticasEvaluacion = ({ evaluacion, onVolver }) => {
   const [estadisticas, setEstadisticas] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [exportando, setExportando] = useState(false);
+  const [exportandoPDF, setExportandoPDF] = useState(false);
 
   useEffect(() => {
     cargarEstadisticas();
@@ -47,6 +50,30 @@ const EstadisticasEvaluacion = ({ evaluacion, onVolver }) => {
     });
   };
 
+  const handleExportarExcel = async () => {
+    try {
+      setExportando(true);
+      await evaluacionesService.exportarEstadisticasExcel(evaluacion.id);
+    } catch (err) {
+      console.error('Error al exportar a Excel:', err);
+      alert('Error al exportar las estadísticas a Excel');
+    } finally {
+      setExportando(false);
+    }
+  };
+
+  const handleExportarPDF = async () => {
+    try {
+      setExportandoPDF(true);
+      await evaluacionesService.exportarEstadisticasPDF(evaluacion.id);
+    } catch (err) {
+      console.error('Error al exportar a PDF:', err);
+      alert('Error al exportar las estadísticas a PDF');
+    } finally {
+      setExportandoPDF(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -72,16 +99,39 @@ const EstadisticasEvaluacion = ({ evaluacion, onVolver }) => {
   return (
     <div className="space-y-6">
       {/* Encabezado */}
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <BarChart3 size={28} />
-            Estadísticas
-          </h2>
-          <p className="text-sm text-gray-600">{evaluacion.titulo}</p>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <button onClick={onVolver} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <BarChart3 size={28} />
+              Estadísticas
+            </h2>
+            <p className="text-sm text-gray-600">{evaluacion.titulo}</p>
+          </div>
+        </div>
+
+        {/* Botones de exportación */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleExportarExcel}
+            disabled={exportando}
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Download size={20} />
+            {exportando ? 'Exportando...' : 'Exportar a Excel'}
+          </button>
+
+          <button
+            onClick={handleExportarPDF}
+            disabled={exportandoPDF}
+            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Download size={20} />
+            {exportandoPDF ? 'Exportando...' : 'Exportar a PDF'}
+          </button>
         </div>
       </div>
 

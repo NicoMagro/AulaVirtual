@@ -8,6 +8,8 @@ const {
   actualizarEvaluacion,
   eliminarEvaluacion,
   obtenerEstadisticas,
+  exportarEstadisticasExcel,
+  exportarEstadisticasPDF,
 } = require('../controllers/evaluacionesController');
 
 const router = express.Router();
@@ -196,6 +198,32 @@ router.get(
   autorizarRoles('profesor', 'admin'),
   validacionEvaluacionId,
   obtenerEstadisticas
+);
+
+/**
+ * GET /api/evaluaciones/:evaluacion_id/exportar-excel
+ * Exportar estadísticas de una evaluación a Excel
+ * Acceso: Profesores asignados al aula y admin
+ */
+router.get(
+  '/:evaluacion_id/exportar-excel',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  validacionEvaluacionId,
+  exportarEstadisticasExcel
+);
+
+/**
+ * GET /api/evaluaciones/:evaluacion_id/exportar-pdf
+ * Exportar estadísticas de una evaluación a PDF con gráficos
+ * Acceso: Profesores asignados al aula y admin
+ */
+router.get(
+  '/:evaluacion_id/exportar-pdf',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  validacionEvaluacionId,
+  exportarEstadisticasPDF
 );
 
 /**
