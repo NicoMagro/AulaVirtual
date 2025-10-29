@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Plus, FileText, Calendar, Clock, Users, Edit, Trash2, Eye, CheckCircle, XCircle, Award } from 'lucide-react';
+import { Plus, FileText, Calendar, Clock, Users, Edit, Trash2, Eye, CheckCircle, XCircle, Award, MoreVertical, PlayCircle, Target } from 'lucide-react';
 import evaluacionesService from '../../services/evaluacionesService';
 import ModalCrearEvaluacion from './ModalCrearEvaluacion';
 import BancoPreguntas from './BancoPreguntas';
@@ -17,6 +17,7 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
   const [vistaActual, setVistaActual] = useState('lista'); // 'lista', 'banco_preguntas', 'realizar_evaluacion', 'mis_notas', 'ver_resultados'
   const [evaluacionActiva, setEvaluacionActiva] = useState(null);
   const [intentoSeleccionado, setIntentoSeleccionado] = useState(null);
+  const [menuAbierto, setMenuAbierto] = useState(null); // ID de la evaluación con menú abierto
 
   const cargarEvaluaciones = async () => {
     try {
@@ -37,6 +38,18 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
       cargarEvaluaciones();
     }
   }, [aula_id]);
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuAbierto && !event.target.closest('.relative')) {
+        setMenuAbierto(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuAbierto]);
 
   const handleCrearEvaluacion = () => {
     setEvaluacionSeleccionada(null);
@@ -131,6 +144,37 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
     );
   };
 
+  const obtenerEstadoEstudiante = (evaluacion) => {
+    const ahora = new Date();
+    const inicio = evaluacion.fecha_inicio ? new Date(evaluacion.fecha_inicio) : null;
+    const fin = evaluacion.fecha_fin ? new Date(evaluacion.fecha_fin) : null;
+    const intentosRealizados = parseInt(evaluacion.intentos_realizados || 0);
+    const intentosPermitidos = parseInt(evaluacion.intentos_permitidos || 1);
+
+    if (evaluacion.estado !== 'publicado') {
+      return { texto: 'No disponible', color: 'bg-gray-100 text-gray-700', puedeRealizar: false };
+    }
+
+    // Verificar si ya usó todos los intentos
+    if (intentosRealizados >= intentosPermitidos) {
+      return { texto: 'Sin intentos disponibles', color: 'bg-gray-100 text-gray-700', puedeRealizar: false };
+    }
+
+    if (inicio && ahora < inicio) {
+      return { texto: 'Próximamente', color: 'bg-blue-100 text-blue-700', puedeRealizar: false };
+    }
+
+    if (fin && ahora > fin) {
+      return { texto: 'Finalizada', color: 'bg-red-100 text-red-700', puedeRealizar: false };
+    }
+
+    return { texto: 'Disponible', color: 'bg-green-100 text-green-700', puedeRealizar: true };
+  };
+
+  const toggleMenu = (evaluacionId) => {
+    setMenuAbierto(menuAbierto === evaluacionId ? null : evaluacionId);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -219,150 +263,255 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
         </div>
       ) : (
         <div className="grid gap-4">
-          {evaluaciones.map((evaluacion) => (
-            <div
-              key={evaluacion.id}
-              className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-            >
-              <div className="flex items-start justify-between">
-                {/* Información principal */}
-                <div className="flex-1">
-                  <div className="flex items-start gap-3 mb-3">
+          {evaluaciones.map((evaluacion) => {
+            const estadoEstudiante = !esProfesor ? obtenerEstadoEstudiante(evaluacion) : null;
+
+            return (
+              <div
+                key={evaluacion.id}
+                className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+              >
+                {/* VISTA PARA PROFESORES */}
+                {esProfesor ? (
+                  <div className="flex items-start justify-between">
+                    {/* Información principal */}
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold text-gray-900 mb-1">
-                        {evaluacion.titulo}
-                      </h3>
-                      {evaluacion.descripcion && (
-                        <p className="text-gray-600 text-sm mb-2">{evaluacion.descripcion}</p>
-                      )}
-                      <div className="flex items-center gap-2">
-                        {obtenerEstadoBadge(evaluacion.estado)}
-                        <span className="text-xs text-gray-500">
-                          por {evaluacion.creado_por_nombre}
+                      <div className="flex items-start gap-3 mb-3">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                            {evaluacion.titulo}
+                          </h3>
+                          {evaluacion.descripcion && (
+                            <p className="text-gray-600 text-sm mb-2">{evaluacion.descripcion}</p>
+                          )}
+                          <div className="flex items-center gap-2">
+                            {obtenerEstadoBadge(evaluacion.estado)}
+                            <span className="text-xs text-gray-500">
+                              por {evaluacion.creado_por_nombre}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metadata */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Calendar size={16} />
+                          <div>
+                            <p className="font-medium">Inicio</p>
+                            <p className="text-xs">{formatearFecha(evaluacion.fecha_inicio)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Calendar size={16} />
+                          <div>
+                            <p className="font-medium">Fin</p>
+                            <p className="text-xs">{formatearFecha(evaluacion.fecha_fin)}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Clock size={16} />
+                          <div>
+                            <p className="font-medium">Duración</p>
+                            <p className="text-xs">
+                              {evaluacion.duracion_maxima_minutos
+                                ? `${evaluacion.duracion_maxima_minutos} min`
+                                : 'Sin límite'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Users size={16} />
+                          <div>
+                            <p className="font-medium">Intentos</p>
+                            <p className="text-xs">{evaluacion.intentos_permitidos}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Información adicional para profesores */}
+                      <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <FileText size={12} />
+                          {evaluacion.total_preguntas_banco || 0} preguntas en banco
                         </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Metadata */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Calendar size={16} />
-                      <div>
-                        <p className="font-medium">Inicio</p>
-                        <p className="text-xs">{formatearFecha(evaluacion.fecha_inicio)}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Calendar size={16} />
-                      <div>
-                        <p className="font-medium">Fin</p>
-                        <p className="text-xs">{formatearFecha(evaluacion.fecha_fin)}</p>
+                        <span className="flex items-center gap-1">
+                          <Target size={12} />
+                          Muestra {evaluacion.cantidad_preguntas_mostrar}
+                        </span>
+                        <span>
+                          Nota mínima: {evaluacion.nota_minima_aprobacion}
+                        </span>
+                        {evaluacion.orden_aleatorio && (
+                          <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
+                            Orden aleatorio
+                          </span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Clock size={16} />
-                      <div>
-                        <p className="font-medium">Duración</p>
-                        <p className="text-xs">
-                          {evaluacion.duracion_maxima_minutos
-                            ? `${evaluacion.duracion_maxima_minutos} min`
-                            : 'Sin límite'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <Users size={16} />
-                      <div>
-                        <p className="font-medium">Intentos</p>
-                        <p className="text-xs">{evaluacion.intentos_permitidos}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Información adicional */}
-                  <div className="mt-3 flex items-center gap-4 text-xs text-gray-500">
-                    <span>
-                      {evaluacion.total_preguntas_banco || 0} preguntas en banco
-                    </span>
-                    <span>
-                      Muestra {evaluacion.cantidad_preguntas_mostrar} preguntas
-                    </span>
-                    <span>
-                      Nota mínima: {evaluacion.nota_minima_aprobacion}
-                    </span>
-                    {evaluacion.orden_aleatorio && (
-                      <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
-                        Orden aleatorio
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Botones de acción */}
-                <div className="flex flex-col gap-2 ml-4">
-                  <button
-                    onClick={() => handleVerEvaluacion(evaluacion)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                    title="Ver evaluación"
-                  >
-                    <Eye size={18} />
-                  </button>
-
-                  {!esProfesor && (
-                    <button
-                      onClick={() => handleVerMisNotas(evaluacion)}
-                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Ver mis notas"
-                    >
-                      <Award size={18} />
-                    </button>
-                  )}
-
-                  {esProfesor && (
-                    <>
-                      {evaluacion.estado === 'borrador' ? (
-                        <button
-                          onClick={() => handleCambiarEstado(evaluacion, 'publicado')}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                          title="Publicar evaluación"
-                        >
-                          <CheckCircle size={18} />
-                        </button>
-                      ) : evaluacion.estado === 'publicado' ? (
-                        <button
-                          onClick={() => handleCambiarEstado(evaluacion, 'borrador')}
-                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="Pasar a borrador"
-                        >
-                          <XCircle size={18} />
-                        </button>
-                      ) : null}
-
+                    {/* Menú desplegable para profesores */}
+                    <div className="relative ml-4">
                       <button
-                        onClick={() => handleEditarEvaluacion(evaluacion)}
+                        onClick={() => toggleMenu(evaluacion.id)}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="Editar evaluación"
                       >
-                        <Edit size={18} />
+                        <MoreVertical size={20} />
+                      </button>
+
+                      {/* Dropdown menu */}
+                      {menuAbierto === evaluacion.id && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
+                          <button
+                            onClick={() => {
+                              handleVerEvaluacion(evaluacion);
+                              setMenuAbierto(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Eye size={16} />
+                            Gestionar Preguntas
+                          </button>
+
+                          {evaluacion.estado === 'borrador' ? (
+                            <button
+                              onClick={() => {
+                                handleCambiarEstado(evaluacion, 'publicado');
+                                setMenuAbierto(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-green-700 hover:bg-green-50"
+                            >
+                              <CheckCircle size={16} />
+                              Publicar Evaluación
+                            </button>
+                          ) : evaluacion.estado === 'publicado' ? (
+                            <button
+                              onClick={() => {
+                                handleCambiarEstado(evaluacion, 'borrador');
+                                setMenuAbierto(null);
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-2 text-sm text-orange-700 hover:bg-orange-50"
+                            >
+                              <XCircle size={16} />
+                              Pasar a Borrador
+                            </button>
+                          ) : null}
+
+                          <button
+                            onClick={() => {
+                              handleEditarEvaluacion(evaluacion);
+                              setMenuAbierto(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Edit size={16} />
+                            Editar Evaluación
+                          </button>
+
+                          <hr className="my-1" />
+
+                          <button
+                            onClick={() => {
+                              handleEliminarEvaluacion(evaluacion);
+                              setMenuAbierto(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 size={16} />
+                            Eliminar Evaluación
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* VISTA PARA ESTUDIANTES */
+                  <div className="space-y-4">
+                    {/* Encabezado */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                          {evaluacion.titulo}
+                        </h3>
+                        {evaluacion.descripcion && (
+                          <p className="text-gray-600 text-sm mb-2">{evaluacion.descripcion}</p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${estadoEstudiante.color}`}>
+                            {estadoEstudiante.texto}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Información relevante para estudiantes */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Calendar size={16} />
+                        <div>
+                          <p className="font-medium">Disponible hasta</p>
+                          <p className="text-xs">{formatearFecha(evaluacion.fecha_fin)}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Clock size={16} />
+                        <div>
+                          <p className="font-medium">Duración</p>
+                          <p className="text-xs">
+                            {evaluacion.duracion_maxima_minutos
+                              ? `${evaluacion.duracion_maxima_minutos} min`
+                              : 'Sin límite'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Users size={16} />
+                        <div>
+                          <p className="font-medium">Intentos</p>
+                          <p className="text-xs">
+                            {evaluacion.intentos_realizados || 0} / {evaluacion.intentos_permitidos}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Información de nota mínima */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Target size={16} className="text-gray-500" />
+                      <span className="text-gray-600">
+                        Nota mínima para aprobar: <span className="font-semibold text-gray-900">{evaluacion.nota_minima_aprobacion}</span>
+                      </span>
+                    </div>
+
+                    {/* Botones de acción para estudiantes */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => handleVerEvaluacion(evaluacion)}
+                        disabled={!estadoEstudiante.puedeRealizar}
+                        className="flex-1 flex items-center justify-center gap-2 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg transition-colors font-medium"
+                      >
+                        <PlayCircle size={20} />
+                        {estadoEstudiante.puedeRealizar ? 'Realizar Evaluación' : estadoEstudiante.texto}
                       </button>
 
                       <button
-                        onClick={() => handleEliminarEvaluacion(evaluacion)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Eliminar evaluación"
+                        onClick={() => handleVerMisNotas(evaluacion)}
+                        className="flex items-center justify-center gap-2 bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg transition-colors font-medium"
                       >
-                        <Trash2 size={18} />
+                        <Award size={20} />
+                        Mis Notas
                       </button>
-                    </>
-                  )}
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

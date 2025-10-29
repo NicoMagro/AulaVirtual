@@ -150,24 +150,40 @@ const obtenerEvaluacionesAula = async (req, res) => {
     }
 
     // Construir query según el rol
-    let query = `
-      SELECT
-        e.*,
-        u.nombre || ' ' || u.apellido as creado_por_nombre,
-        (SELECT COUNT(*) FROM preguntas_banco WHERE evaluacion_id = e.id) as total_preguntas_banco
-      FROM evaluaciones e
-      LEFT JOIN usuarios u ON e.creado_por = u.id
-      WHERE e.aula_id = $1
-    `;
+    let query;
+    let queryParams;
 
-    // Los estudiantes solo ven evaluaciones publicadas
     if (rol_activo === 'estudiante') {
-      query += ` AND e.estado = 'publicado'`;
+      // Para estudiantes, incluir información de sus intentos
+      query = `
+        SELECT
+          e.*,
+          u.nombre || ' ' || u.apellido as creado_por_nombre,
+          (SELECT COUNT(*) FROM preguntas_banco WHERE evaluacion_id = e.id) as total_preguntas_banco,
+          (SELECT COUNT(*) FROM intentos_evaluacion
+           WHERE evaluacion_id = e.id AND estudiante_id = $2) as intentos_realizados
+        FROM evaluaciones e
+        LEFT JOIN usuarios u ON e.creado_por = u.id
+        WHERE e.aula_id = $1 AND e.estado = 'publicado'
+        ORDER BY e.fecha_creacion DESC
+      `;
+      queryParams = [aula_id, usuario_id];
+    } else {
+      // Para profesores y admin, no necesitan info de intentos
+      query = `
+        SELECT
+          e.*,
+          u.nombre || ' ' || u.apellido as creado_por_nombre,
+          (SELECT COUNT(*) FROM preguntas_banco WHERE evaluacion_id = e.id) as total_preguntas_banco
+        FROM evaluaciones e
+        LEFT JOIN usuarios u ON e.creado_por = u.id
+        WHERE e.aula_id = $1
+        ORDER BY e.fecha_creacion DESC
+      `;
+      queryParams = [aula_id];
     }
 
-    query += ' ORDER BY e.fecha_creacion DESC';
-
-    const resultado = await db.query(query, [aula_id]);
+    const resultado = await db.query(query, queryParams);
 
     res.status(200).json({
       success: true,

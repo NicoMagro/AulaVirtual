@@ -15,6 +15,9 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
+  BookOpen,
+  MessageSquare,
+  ClipboardList,
 } from 'lucide-react';
 import {
   DndContext,
@@ -148,6 +151,7 @@ const VistaAula = () => {
   const [bloqueSeleccionado, setBloqueSeleccionado] = useState(null);
   const [nuevoBloque, setNuevoBloque] = useState(false);
   const [modalGestionarHojas, setModalGestionarHojas] = useState(false);
+  const [seccionActiva, setSeccionActiva] = useState('contenido'); // 'contenido' | 'consultas' | 'evaluaciones'
 
   const esProfesor = rolActivo === 'profesor' || rolActivo === 'admin';
 
@@ -317,8 +321,15 @@ const VistaAula = () => {
     );
   }
 
+  // Opciones del menú lateral
+  const menuItems = [
+    { id: 'contenido', label: 'Contenido', icon: BookOpen },
+    { id: 'consultas', label: 'Consultas', icon: MessageSquare },
+    { id: 'evaluaciones', label: 'Evaluaciones', icon: ClipboardList },
+  ];
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Encabezado */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -334,7 +345,7 @@ const VistaAula = () => {
           </div>
         </div>
 
-        {esProfesor && (
+        {esProfesor && seccionActiva === 'contenido' && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => setModoEdicion(!modoEdicion)}
@@ -358,105 +369,150 @@ const VistaAula = () => {
         </div>
       )}
 
-      {/* Pestañas de hojas */}
-      {hojas.length > 0 && (
-        <TabsHojas
-          hojas={hojas}
-          hojaActiva={hojaActiva}
-          onCambiarHoja={handleCambiarHoja}
-          onGestionarHojas={handleGestionarHojas}
-          esProfesor={esProfesor}
-          onHojasActualizadas={cargarHojas}
-        />
-      )}
-
-      {/* Contenido del aula */}
-      <div className="bg-white rounded-lg shadow-md p-8">
-        {bloques.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              {esProfesor
-                ? 'No hay contenido en esta aula. Comienza agregando bloques.'
-                : 'Esta aula aún no tiene contenido disponible.'}
-            </p>
-            {esProfesor && modoEdicion && (
-              <button
-                onClick={handleAgregarBloque}
-                className="mt-4 flex items-center gap-2 mx-auto bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors"
-              >
-                <Plus size={20} />
-                Agregar Primer Bloque
-              </button>
-            )}
+      {/* Layout con menú lateral y contenido */}
+      <div className="flex gap-6">
+        {/* Menú lateral */}
+        <div className="w-64 flex-shrink-0">
+          <div className="bg-white rounded-lg shadow-md p-4 sticky top-6">
+            <nav className="space-y-2">
+              {menuItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setSeccionActiva(item.id);
+                      if (item.id !== 'contenido') {
+                        setModoEdicion(false); // Salir del modo edición al cambiar de sección
+                      }
+                    }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left ${
+                      seccionActiva === item.id
+                        ? 'bg-primary-500 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span className="font-medium">{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
           </div>
-        ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={bloques.map((b) => b.id)}
-              strategy={verticalListSortingStrategy}
-              disabled={!modoEdicion || !esProfesor}
-            >
-              <div className="space-y-4">
-                {bloques.map((bloque) => (
-                  <BloqueSortable
-                    key={bloque.id}
-                    bloque={bloque}
-                    modoEdicion={modoEdicion}
-                    esProfesor={esProfesor}
-                    handleEditarBloque={handleEditarBloque}
-                    handleEliminarBloque={handleEliminarBloque}
-                    handleToggleVisibilidadBloque={handleToggleVisibilidadBloque}
-                  />
-                ))}
+        </div>
 
-                {/* Botón para agregar nuevo bloque */}
-                {modoEdicion && esProfesor && (
-                  <div className="flex justify-center pt-4">
-                    <button
-                      onClick={handleAgregarBloque}
-                      className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors"
-                    >
-                      <Plus size={20} />
-                      Agregar Bloque
-                    </button>
+        {/* Área de contenido */}
+        <div className="flex-1 min-w-0 space-y-6">
+          {/* SECCIÓN: CONTENIDO */}
+          {seccionActiva === 'contenido' && (
+            <>
+              {/* Pestañas de hojas */}
+              {hojas.length > 0 && (
+                <TabsHojas
+                  hojas={hojas}
+                  hojaActiva={hojaActiva}
+                  onCambiarHoja={handleCambiarHoja}
+                  onGestionarHojas={handleGestionarHojas}
+                  esProfesor={esProfesor}
+                  onHojasActualizadas={cargarHojas}
+                />
+              )}
+
+              {/* Contenido del aula */}
+              <div className="bg-white rounded-lg shadow-md p-8">
+                {bloques.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 text-lg">
+                      {esProfesor
+                        ? 'No hay contenido en esta aula. Comienza agregando bloques.'
+                        : 'Esta aula aún no tiene contenido disponible.'}
+                    </p>
+                    {esProfesor && modoEdicion && (
+                      <button
+                        onClick={handleAgregarBloque}
+                        className="mt-4 flex items-center gap-2 mx-auto bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors"
+                      >
+                        <Plus size={20} />
+                        Agregar Primer Bloque
+                      </button>
+                    )}
                   </div>
+                ) : (
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={bloques.map((b) => b.id)}
+                      strategy={verticalListSortingStrategy}
+                      disabled={!modoEdicion || !esProfesor}
+                    >
+                      <div className="space-y-4">
+                        {bloques.map((bloque) => (
+                          <BloqueSortable
+                            key={bloque.id}
+                            bloque={bloque}
+                            modoEdicion={modoEdicion}
+                            esProfesor={esProfesor}
+                            handleEditarBloque={handleEditarBloque}
+                            handleEliminarBloque={handleEliminarBloque}
+                            handleToggleVisibilidadBloque={handleToggleVisibilidadBloque}
+                          />
+                        ))}
+
+                        {/* Botón para agregar nuevo bloque */}
+                        {modoEdicion && esProfesor && (
+                          <div className="flex justify-center pt-4">
+                            <button
+                              onClick={handleAgregarBloque}
+                              className="flex items-center gap-2 bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-lg transition-colors"
+                            >
+                              <Plus size={20} />
+                              Agregar Bloque
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </SortableContext>
+                  </DndContext>
                 )}
               </div>
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
 
-      {/* Sección de archivos */}
-      {hojaActiva && (
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <ListaArchivos
-            aula_id={aula_id}
-            hoja_id={hojaActiva.id}
-            esProfesor={esProfesor}
-          />
+              {/* Sección de archivos */}
+              {hojaActiva && (
+                <div className="bg-white rounded-lg shadow-md p-8">
+                  <ListaArchivos
+                    aula_id={aula_id}
+                    hoja_id={hojaActiva.id}
+                    esProfesor={esProfesor}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {/* SECCIÓN: CONSULTAS */}
+          {seccionActiva === 'consultas' && (
+            <div className="bg-white rounded-lg shadow-md p-8">
+              <ConsultasAula
+                aula_id={aula_id}
+                esProfesor={esProfesor}
+                usuario={user}
+              />
+            </div>
+          )}
+
+          {/* SECCIÓN: EVALUACIONES */}
+          {seccionActiva === 'evaluaciones' && (
+            <div className="bg-white rounded-lg shadow-md p-8">
+              <EvaluacionesAula
+                aula_id={aula_id}
+                esProfesor={esProfesor}
+              />
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Sección de consultas */}
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <ConsultasAula
-          aula_id={aula_id}
-          esProfesor={esProfesor}
-          usuario={user}
-        />
-      </div>
-
-      {/* Sección de evaluaciones */}
-      <div className="bg-white rounded-lg shadow-md p-8">
-        <EvaluacionesAula
-          aula_id={aula_id}
-          esProfesor={esProfesor}
-        />
       </div>
 
       {/* Modal para editar/crear bloques */}
