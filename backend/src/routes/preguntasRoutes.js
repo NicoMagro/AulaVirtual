@@ -7,6 +7,14 @@ const {
   obtenerPreguntaDetalle,
   actualizarPregunta,
   eliminarPregunta,
+  // Imágenes
+  subirImagenMiddleware,
+  subirImagenPregunta,
+  obtenerImagenesPregunta,
+  eliminarImagenPregunta,
+  subirImagenOpcion,
+  obtenerImagenesOpcion,
+  eliminarImagenOpcion,
 } = require('../controllers/preguntasController');
 
 const router = express.Router();
@@ -174,6 +182,88 @@ router.delete(
   autorizarRoles('profesor', 'admin'),
   validacionPreguntaId,
   eliminarPregunta
+);
+
+// ============================================
+// Rutas para gestión de imágenes
+// ============================================
+
+/**
+ * POST /api/preguntas/:pregunta_id/imagen
+ * Subir una imagen a una pregunta
+ * Acceso: Profesores asignados al aula
+ */
+router.post(
+  '/:pregunta_id/imagen',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  validacionPreguntaId,
+  subirImagenMiddleware,
+  subirImagenPregunta
+);
+
+/**
+ * GET /api/preguntas/:pregunta_id/imagenes
+ * Obtener imágenes de una pregunta
+ * Acceso: Todos los usuarios autenticados
+ */
+router.get(
+  '/:pregunta_id/imagenes',
+  autenticar,
+  validacionPreguntaId,
+  obtenerImagenesPregunta
+);
+
+/**
+ * DELETE /api/preguntas/imagenes/:imagen_id
+ * Eliminar una imagen de una pregunta
+ * Acceso: Profesores asignados al aula
+ */
+router.delete(
+  '/imagenes/:imagen_id',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  [param('imagen_id').isUUID().withMessage('ID de imagen inválido')],
+  eliminarImagenPregunta
+);
+
+/**
+ * POST /api/preguntas/opciones/:opcion_id/imagen
+ * Subir una imagen a una opción de pregunta
+ * Acceso: Profesores asignados al aula
+ */
+router.post(
+  '/opciones/:opcion_id/imagen',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  [param('opcion_id').isUUID().withMessage('ID de opción inválido')],
+  subirImagenMiddleware,
+  subirImagenOpcion
+);
+
+/**
+ * GET /api/preguntas/opciones/:opcion_id/imagenes
+ * Obtener imágenes de una opción
+ * Acceso: Todos los usuarios autenticados
+ */
+router.get(
+  '/opciones/:opcion_id/imagenes',
+  autenticar,
+  [param('opcion_id').isUUID().withMessage('ID de opción inválido')],
+  obtenerImagenesOpcion
+);
+
+/**
+ * DELETE /api/preguntas/opciones/imagenes/:imagen_id
+ * Eliminar una imagen de una opción
+ * Acceso: Profesores asignados al aula
+ */
+router.delete(
+  '/opciones/imagenes/:imagen_id',
+  autenticar,
+  autorizarRoles('profesor', 'admin'),
+  [param('imagen_id').isUUID().withMessage('ID de imagen inválido')],
+  eliminarImagenOpcion
 );
 
 module.exports = router;

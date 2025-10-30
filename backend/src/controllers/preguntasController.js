@@ -561,7 +561,7 @@ const eliminarPregunta = async (req, res) => {
 
 /**
  * Obtener pregunta completa con sus relaciones
- * (opciones para multiple_choice, respuesta correcta para V/F)
+ * (opciones para multiple_choice, respuesta correcta para V/F, imágenes)
  */
 async function obtenerPreguntaCompleta(pregunta_id) {
   const pregunta = await db.query('SELECT * FROM preguntas_banco WHERE id = $1', [pregunta_id]);
@@ -573,7 +573,14 @@ async function obtenerPreguntaCompleta(pregunta_id) {
   const preguntaData = pregunta.rows[0];
   const resultado = { ...preguntaData };
 
-  // Si es múltiple choice, obtener opciones
+  // Obtener imágenes de la pregunta
+  const imagenesPregunta = await db.query(
+    'SELECT * FROM imagenes_preguntas WHERE pregunta_id = $1 ORDER BY fecha_subida ASC',
+    [pregunta_id]
+  );
+  resultado.imagenes = imagenesPregunta.rows;
+
+  // Si es múltiple choice, obtener opciones e imágenes de cada opción
   if (preguntaData.tipo_pregunta === 'multiple_choice') {
     const opciones = await db.query(
       `SELECT id, texto_opcion as texto, es_correcta, orden
@@ -582,7 +589,22 @@ async function obtenerPreguntaCompleta(pregunta_id) {
        ORDER BY orden ASC`,
       [pregunta_id]
     );
-    resultado.opciones = opciones.rows;
+
+    // Para cada opción, obtener sus imágenes
+    const opcionesConImagenes = await Promise.all(
+      opciones.rows.map(async (opcion) => {
+        const imagenesOpcion = await db.query(
+          'SELECT * FROM imagenes_opciones WHERE opcion_id = $1 ORDER BY fecha_subida ASC',
+          [opcion.id]
+        );
+        return {
+          ...opcion,
+          imagenes: imagenesOpcion.rows,
+        };
+      })
+    );
+
+    resultado.opciones = opcionesConImagenes;
   }
 
   // Si es verdadero/falso, obtener respuesta correcta
@@ -602,10 +624,527 @@ async function obtenerPreguntaCompleta(pregunta_id) {
   return resultado;
 }
 
+// ============================================
+// GESTIÓN DE IMÁGENES EN PREGUNTAS Y OPCIONES
+// ============================================
+
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
+const { v4: uuidv4 } = require('uuid');
+
+// Configuración de multer para imágenes de evaluaciones
+const storageImagenes = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadsDir = path.join(__dirname, '../../uploads/evaluaciones');
+    try {
+      await fs.mkdir(uploadsDir, { recursive: true });
+      cb(null, uploadsDir);
+    } catch (error) {
+      cb(error);
+    }
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${uuidv4()}${ext}`;
+    cb(null, uniqueName);
+  },
+});
+
+// Filtro para validar que solo sean imágenes
+const imageFileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Tipo de archivo no permitido: ${file.mimetype}. Solo se permiten imágenes (JPEG, PNG, GIF, WEBP)`), false);
+  }
+};
+
+// Configuración de multer para imágenes
+const uploadImagen = multer({
+  storage: storageImagenes,
+  fileFilter: imageFileFilter,
+  limits: {
+    fileSize: 10485760, // 10 MB en bytes
+  },
+});
+
+/**
+ * Middleware de multer para subir una imagen
+ */
+const subirImagenMiddleware = uploadImagen.single('imagen');
+
+/**
+ * Subir una imagen a una pregunta
+ * POST /api/preguntas/:pregunta_id/imagen
+ */
+const subirImagenPregunta = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { pregunta_id } = req.params;
+  const usuario_id = req.usuario.id;
+  const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'No se proporcionó ninguna imagen',
+    });
+  }
+
+  try {
+    // Verificar que la pregunta existe
+    const pregunta = await db.query('SELECT * FROM preguntas_banco WHERE id = $1', [pregunta_id]);
+
+    if (pregunta.rows.length === 0) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(404).json({
+        success: false,
+        message: 'Pregunta no encontrada',
+      });
+    }
+
+    const preguntaData = pregunta.rows[0];
+
+    // Obtener la evaluación para verificar permisos
+    const evaluacion = await db.query('SELECT * FROM evaluaciones WHERE id = $1', [preguntaData.evaluacion_id]);
+    const evaluacionData = evaluacion.rows[0];
+
+    // Verificar permisos (solo profesores del aula o admin)
+    if (rol_activo !== 'admin') {
+      const esProfesor = await db.query(
+        'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+        [evaluacionData.aula_id, usuario_id]
+      );
+
+      if (esProfesor.rows.length === 0) {
+        await fs.unlink(req.file.path).catch(console.error);
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para subir imágenes a esta pregunta',
+        });
+      }
+    }
+
+    // Insertar registro en la base de datos
+    const resultado = await db.query(
+      `INSERT INTO imagenes_preguntas
+       (pregunta_id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, subido_por)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        pregunta_id,
+        req.file.originalname,
+        req.file.filename,
+        req.file.mimetype,
+        req.file.size,
+        usuario_id,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Imagen subida exitosamente',
+      data: resultado.rows[0],
+    });
+  } catch (error) {
+    console.error('Error al subir imagen de pregunta:', error);
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Error al subir la imagen',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Obtener imágenes de una pregunta
+ * GET /api/preguntas/:pregunta_id/imagenes
+ */
+const obtenerImagenesPregunta = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { pregunta_id } = req.params;
+
+  try {
+    // Verificar que la pregunta existe
+    const pregunta = await db.query('SELECT * FROM preguntas_banco WHERE id = $1', [pregunta_id]);
+
+    if (pregunta.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Pregunta no encontrada',
+      });
+    }
+
+    // Obtener imágenes
+    const imagenes = await db.query(
+      `SELECT
+        ip.*,
+        u.nombre || ' ' || u.apellido as subido_por_nombre
+      FROM imagenes_preguntas ip
+      LEFT JOIN usuarios u ON ip.subido_por = u.id
+      WHERE ip.pregunta_id = $1
+      ORDER BY ip.fecha_subida ASC`,
+      [pregunta_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: imagenes.rows,
+    });
+  } catch (error) {
+    console.error('Error al obtener imágenes de pregunta:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las imágenes',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Eliminar una imagen de una pregunta
+ * DELETE /api/preguntas/imagenes/:imagen_id
+ */
+const eliminarImagenPregunta = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { imagen_id } = req.params;
+  const usuario_id = req.usuario.id;
+  const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
+
+  try {
+    // Obtener información de la imagen
+    const imagen = await db.query(
+      'SELECT ip.*, pb.evaluacion_id FROM imagenes_preguntas ip JOIN preguntas_banco pb ON ip.pregunta_id = pb.id WHERE ip.id = $1',
+      [imagen_id]
+    );
+
+    if (imagen.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Imagen no encontrada',
+      });
+    }
+
+    const imagenData = imagen.rows[0];
+
+    // Obtener la evaluación para verificar permisos
+    const evaluacion = await db.query('SELECT * FROM evaluaciones WHERE id = $1', [imagenData.evaluacion_id]);
+    const evaluacionData = evaluacion.rows[0];
+
+    // Verificar permisos (solo profesores del aula o admin)
+    if (rol_activo !== 'admin') {
+      const esProfesor = await db.query(
+        'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+        [evaluacionData.aula_id, usuario_id]
+      );
+
+      if (esProfesor.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para eliminar esta imagen',
+        });
+      }
+    }
+
+    // Eliminar archivo físico
+    const filePath = path.join(__dirname, '../../uploads/evaluaciones', imagenData.nombre_archivo);
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      console.error('Error al eliminar archivo físico:', error);
+    }
+
+    // Eliminar registro de la base de datos
+    await db.query('DELETE FROM imagenes_preguntas WHERE id = $1', [imagen_id]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Imagen eliminada exitosamente',
+    });
+  } catch (error) {
+    console.error('Error al eliminar imagen de pregunta:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar la imagen',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Subir una imagen a una opción de pregunta
+ * POST /api/preguntas/opciones/:opcion_id/imagen
+ */
+const subirImagenOpcion = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { opcion_id } = req.params;
+  const usuario_id = req.usuario.id;
+  const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
+
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: 'No se proporcionó ninguna imagen',
+    });
+  }
+
+  try {
+    // Verificar que la opción existe
+    const opcion = await db.query(
+      'SELECT op.*, pb.evaluacion_id FROM opciones_pregunta op JOIN preguntas_banco pb ON op.pregunta_id = pb.id WHERE op.id = $1',
+      [opcion_id]
+    );
+
+    if (opcion.rows.length === 0) {
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(404).json({
+        success: false,
+        message: 'Opción no encontrada',
+      });
+    }
+
+    const opcionData = opcion.rows[0];
+
+    // Obtener la evaluación para verificar permisos
+    const evaluacion = await db.query('SELECT * FROM evaluaciones WHERE id = $1', [opcionData.evaluacion_id]);
+    const evaluacionData = evaluacion.rows[0];
+
+    // Verificar permisos (solo profesores del aula o admin)
+    if (rol_activo !== 'admin') {
+      const esProfesor = await db.query(
+        'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+        [evaluacionData.aula_id, usuario_id]
+      );
+
+      if (esProfesor.rows.length === 0) {
+        await fs.unlink(req.file.path).catch(console.error);
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para subir imágenes a esta opción',
+        });
+      }
+    }
+
+    // Insertar registro en la base de datos
+    const resultado = await db.query(
+      `INSERT INTO imagenes_opciones
+       (opcion_id, nombre_original, nombre_archivo, tipo_mime, tamano_bytes, subido_por)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [
+        opcion_id,
+        req.file.originalname,
+        req.file.filename,
+        req.file.mimetype,
+        req.file.size,
+        usuario_id,
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: 'Imagen subida exitosamente',
+      data: resultado.rows[0],
+    });
+  } catch (error) {
+    console.error('Error al subir imagen de opción:', error);
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Error al subir la imagen',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Obtener imágenes de una opción
+ * GET /api/preguntas/opciones/:opcion_id/imagenes
+ */
+const obtenerImagenesOpcion = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { opcion_id } = req.params;
+
+  try {
+    // Verificar que la opción existe
+    const opcion = await db.query('SELECT * FROM opciones_pregunta WHERE id = $1', [opcion_id]);
+
+    if (opcion.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Opción no encontrada',
+      });
+    }
+
+    // Obtener imágenes
+    const imagenes = await db.query(
+      `SELECT
+        io.*,
+        u.nombre || ' ' || u.apellido as subido_por_nombre
+      FROM imagenes_opciones io
+      LEFT JOIN usuarios u ON io.subido_por = u.id
+      WHERE io.opcion_id = $1
+      ORDER BY io.fecha_subida ASC`,
+      [opcion_id]
+    );
+
+    res.status(200).json({
+      success: true,
+      data: imagenes.rows,
+    });
+  } catch (error) {
+    console.error('Error al obtener imágenes de opción:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener las imágenes',
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Eliminar una imagen de una opción
+ * DELETE /api/preguntas/opciones/imagenes/:imagen_id
+ */
+const eliminarImagenOpcion = async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      errors: errors.array(),
+    });
+  }
+
+  const { imagen_id } = req.params;
+  const usuario_id = req.usuario.id;
+  const rol_activo = req.headers['x-rol-activo'] || req.usuario.roles[0];
+
+  try {
+    // Obtener información de la imagen
+    const imagen = await db.query(
+      'SELECT io.*, pb.evaluacion_id FROM imagenes_opciones io JOIN opciones_pregunta op ON io.opcion_id = op.id JOIN preguntas_banco pb ON op.pregunta_id = pb.id WHERE io.id = $1',
+      [imagen_id]
+    );
+
+    if (imagen.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Imagen no encontrada',
+      });
+    }
+
+    const imagenData = imagen.rows[0];
+
+    // Obtener la evaluación para verificar permisos
+    const evaluacion = await db.query('SELECT * FROM evaluaciones WHERE id = $1', [imagenData.evaluacion_id]);
+    const evaluacionData = evaluacion.rows[0];
+
+    // Verificar permisos (solo profesores del aula o admin)
+    if (rol_activo !== 'admin') {
+      const esProfesor = await db.query(
+        'SELECT * FROM aula_profesores WHERE aula_id = $1 AND profesor_id = $2 AND activo = true',
+        [evaluacionData.aula_id, usuario_id]
+      );
+
+      if (esProfesor.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'No tienes permiso para eliminar esta imagen',
+        });
+      }
+    }
+
+    // Eliminar archivo físico
+    const filePath = path.join(__dirname, '../../uploads/evaluaciones', imagenData.nombre_archivo);
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      console.error('Error al eliminar archivo físico:', error);
+    }
+
+    // Eliminar registro de la base de datos
+    await db.query('DELETE FROM imagenes_opciones WHERE id = $1', [imagen_id]);
+
+    res.status(200).json({
+      success: true,
+      message: 'Imagen eliminada exitosamente',
+    });
+  } catch (error) {
+    console.error('Error al eliminar imagen de opción:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al eliminar la imagen',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   crearPregunta,
   obtenerPreguntasEvaluacion,
   obtenerPreguntaDetalle,
   actualizarPregunta,
   eliminarPregunta,
+  // Imágenes
+  subirImagenMiddleware,
+  subirImagenPregunta,
+  obtenerImagenesPregunta,
+  eliminarImagenPregunta,
+  subirImagenOpcion,
+  obtenerImagenesOpcion,
+  eliminarImagenOpcion,
 };
