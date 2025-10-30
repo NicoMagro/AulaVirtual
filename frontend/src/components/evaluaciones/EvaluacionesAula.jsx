@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { Plus, FileText, Calendar, Clock, Users, Edit, Trash2, Eye, CheckCircle, XCircle, Award, MoreVertical, PlayCircle, Target } from 'lucide-react';
+import { Plus, FileText, Calendar, Clock, Users, Edit, Trash2, Eye, CheckCircle, XCircle, Award, MoreVertical, PlayCircle, Target, ClipboardCheck, BarChart3 } from 'lucide-react';
 import evaluacionesService from '../../services/evaluacionesService';
 import ModalCrearEvaluacion from './ModalCrearEvaluacion';
 import BancoPreguntas from './BancoPreguntas';
 import RealizarEvaluacion from './RealizarEvaluacion';
 import MisNotasEvaluacion from './MisNotasEvaluacion';
 import VerResultados from './VerResultados';
+import EstadisticasEvaluacion from './EstadisticasEvaluacion';
+import IntentosCalificar from './IntentosCalificar';
+import CalificarIntento from './CalificarIntento';
 
 const EvaluacionesAula = ({ aula_id, esProfesor }) => {
   const [evaluaciones, setEvaluaciones] = useState([]);
@@ -65,6 +68,16 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
     setEvaluacionActiva(evaluacion);
     // Profesores van al banco de preguntas, estudiantes a realizar evaluación
     setVistaActual(esProfesor ? 'banco_preguntas' : 'realizar_evaluacion');
+  };
+
+  const handleVerEstadisticas = (evaluacion) => {
+    setEvaluacionActiva(evaluacion);
+    setVistaActual('estadisticas');
+  };
+
+  const handleVerIntentos = (evaluacion) => {
+    setEvaluacionActiva(evaluacion);
+    setVistaActual('intentos');
   };
 
   const handleVolverALista = () => {
@@ -189,6 +202,47 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
       <BancoPreguntas
         evaluacion={evaluacionActiva}
         onVolver={handleVolverALista}
+      />
+    );
+  }
+
+  // Si estamos viendo estadísticas
+  if (vistaActual === 'estadisticas' && evaluacionActiva) {
+    return (
+      <EstadisticasEvaluacion
+        evaluacion={evaluacionActiva}
+        onVolver={handleVolverALista}
+      />
+    );
+  }
+
+  // Si estamos viendo intentos para calificar (sin seleccionar uno específico)
+  if (vistaActual === 'intentos' && evaluacionActiva) {
+    return (
+      <IntentosCalificar
+        evaluacion={evaluacionActiva}
+        onVolver={handleVolverALista}
+        onSeleccionarIntento={(intento) => {
+          setIntentoSeleccionado(intento);
+          setVistaActual('calificar');
+        }}
+      />
+    );
+  }
+
+  // Si estamos calificando un intento específico
+  if (vistaActual === 'calificar' && intentoSeleccionado && evaluacionActiva) {
+    return (
+      <CalificarIntento
+        intento={intentoSeleccionado}
+        onVolver={() => {
+          setVistaActual('intentos');
+          setIntentoSeleccionado(null);
+        }}
+        onPublicar={() => {
+          setVistaActual('intentos');
+          setIntentoSeleccionado(null);
+        }}
       />
     );
   }
@@ -375,6 +429,30 @@ const EvaluacionesAula = ({ aula_id, esProfesor }) => {
                             <Eye size={16} />
                             Gestionar Preguntas
                           </button>
+
+                          <button
+                            onClick={() => {
+                              handleVerIntentos(evaluacion);
+                              setMenuAbierto(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <ClipboardCheck size={16} />
+                            Calificar Intentos
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              handleVerEstadisticas(evaluacion);
+                              setMenuAbierto(null);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <BarChart3 size={16} />
+                            Ver Estadísticas
+                          </button>
+
+                          <hr className="my-1" />
 
                           {evaluacion.estado === 'borrador' ? (
                             <button
