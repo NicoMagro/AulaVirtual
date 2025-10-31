@@ -560,6 +560,42 @@ CREATE TABLE imagenes_respuestas (
 );
 
 -- ============================================
+-- Tabla: imagenes_preguntas
+-- Imágenes adjuntas a enunciados de preguntas del banco
+-- ============================================
+CREATE TABLE imagenes_preguntas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pregunta_id UUID REFERENCES preguntas_banco(id) ON DELETE CASCADE NOT NULL,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamano_bytes BIGINT NOT NULL,
+    subido_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT tamano_positivo_imagen_pregunta CHECK (tamano_bytes > 0),
+    CONSTRAINT tamano_maximo_imagen_pregunta CHECK (tamano_bytes <= 10485760),
+    CONSTRAINT tipo_mime_imagen_pregunta CHECK (tipo_mime IN ('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'))
+);
+
+-- ============================================
+-- Tabla: imagenes_opciones
+-- Imágenes adjuntas a opciones de preguntas de múltiple choice
+-- ============================================
+CREATE TABLE imagenes_opciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    opcion_id UUID REFERENCES opciones_pregunta(id) ON DELETE CASCADE NOT NULL,
+    nombre_original VARCHAR(255) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL UNIQUE,
+    tipo_mime VARCHAR(100) NOT NULL,
+    tamano_bytes BIGINT NOT NULL,
+    subido_por UUID REFERENCES usuarios(id) ON DELETE SET NULL,
+    fecha_subida TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT tamano_positivo_imagen_opcion CHECK (tamano_bytes > 0),
+    CONSTRAINT tamano_maximo_imagen_opcion CHECK (tamano_bytes <= 10485760),
+    CONSTRAINT tipo_mime_imagen_opcion CHECK (tipo_mime IN ('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'))
+);
+
+-- ============================================
 -- Índices para evaluaciones
 -- ============================================
 CREATE INDEX idx_evaluaciones_aula ON evaluaciones(aula_id);
@@ -613,6 +649,18 @@ CREATE INDEX idx_respuestas_opcion ON respuestas_estudiante(opcion_seleccionada_
 CREATE INDEX idx_imagenes_respuestas_respuesta ON imagenes_respuestas(respuesta_id);
 
 -- ============================================
+-- Índices para imagenes_preguntas
+-- ============================================
+CREATE INDEX idx_imagenes_preguntas_pregunta ON imagenes_preguntas(pregunta_id);
+CREATE INDEX idx_imagenes_preguntas_subido_por ON imagenes_preguntas(subido_por);
+
+-- ============================================
+-- Índices para imagenes_opciones
+-- ============================================
+CREATE INDEX idx_imagenes_opciones_opcion ON imagenes_opciones(opcion_id);
+CREATE INDEX idx_imagenes_opciones_subido_por ON imagenes_opciones(subido_por);
+
+-- ============================================
 -- Triggers para actualizar fecha_actualizacion en evaluaciones
 -- ============================================
 CREATE TRIGGER trigger_actualizar_evaluaciones
@@ -655,6 +703,20 @@ COMMENT ON COLUMN respuestas_estudiante.retroalimentacion_profesor IS 'Retroalim
 
 COMMENT ON TABLE imagenes_respuestas IS 'Imágenes adjuntas a respuestas de desarrollo';
 
+COMMENT ON TABLE imagenes_preguntas IS 'Imágenes adjuntas a enunciados de preguntas del banco';
+COMMENT ON COLUMN imagenes_preguntas.pregunta_id IS 'ID de la pregunta del banco';
+COMMENT ON COLUMN imagenes_preguntas.nombre_original IS 'Nombre original de la imagen al subirla';
+COMMENT ON COLUMN imagenes_preguntas.nombre_archivo IS 'Nombre único de la imagen en el servidor (UUID)';
+COMMENT ON COLUMN imagenes_preguntas.tipo_mime IS 'Tipo MIME de la imagen (image/jpeg, image/png, etc.)';
+COMMENT ON COLUMN imagenes_preguntas.tamano_bytes IS 'Tamaño de la imagen en bytes (máximo 10MB)';
+
+COMMENT ON TABLE imagenes_opciones IS 'Imágenes adjuntas a opciones de preguntas de múltiple choice';
+COMMENT ON COLUMN imagenes_opciones.opcion_id IS 'ID de la opción de respuesta';
+COMMENT ON COLUMN imagenes_opciones.nombre_original IS 'Nombre original de la imagen al subirla';
+COMMENT ON COLUMN imagenes_opciones.nombre_archivo IS 'Nombre único de la imagen en el servidor (UUID)';
+COMMENT ON COLUMN imagenes_opciones.tipo_mime IS 'Tipo MIME de la imagen (image/jpeg, image/png, etc.)';
+COMMENT ON COLUMN imagenes_opciones.tamano_bytes IS 'Tamaño de la imagen en bytes (máximo 10MB)';
+
 -- ============================================
 -- Mensaje de confirmación
 -- ============================================
@@ -665,7 +727,7 @@ BEGIN
     RAISE NOTICE 'Tablas básicas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes';
     RAISE NOTICE 'Tablas de contenido: hojas_aula, contenido_aulas, archivos_aula';
     RAISE NOTICE 'Tablas de consultas: consultas, respuestas_consultas, imagenes_consultas';
-    RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, imagenes_respuestas';
+    RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, imagenes_respuestas, imagenes_preguntas, imagenes_opciones';
     RAISE NOTICE 'Roles insertados: admin, profesor, estudiante';
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Sistema de hojas por aula:';

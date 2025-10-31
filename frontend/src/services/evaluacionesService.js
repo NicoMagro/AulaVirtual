@@ -248,6 +248,79 @@ const evaluacionesService = {
 
     return response;
   },
+
+  // ==========================================
+  // GESTIÓN DE IMÁGENES
+  // ==========================================
+
+  /**
+   * Subir imagen a una pregunta
+   */
+  subirImagenPregunta: async (preguntaId, archivoImagen) => {
+    const formData = new FormData();
+    formData.append('imagen', archivoImagen);
+
+    const response = await api.post(`/preguntas/${preguntaId}/imagen`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Obtener imágenes de una pregunta
+   */
+  obtenerImagenesPregunta: async (preguntaId) => {
+    const response = await api.get(`/preguntas/${preguntaId}/imagenes`);
+    return response.data;
+  },
+
+  /**
+   * Eliminar imagen de una pregunta
+   */
+  eliminarImagenPregunta: async (imagenId) => {
+    const response = await api.delete(`/preguntas/imagenes/${imagenId}`);
+    return response.data;
+  },
+
+  /**
+   * Subir imagen a una opción de pregunta
+   */
+  subirImagenOpcion: async (opcionId, archivoImagen) => {
+    const formData = new FormData();
+    formData.append('imagen', archivoImagen);
+
+    const response = await api.post(`/preguntas/opciones/${opcionId}/imagen`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  /**
+   * Obtener imágenes de una opción
+   */
+  obtenerImagenesOpcion: async (opcionId) => {
+    const response = await api.get(`/preguntas/opciones/${opcionId}/imagenes`);
+    return response.data;
+  },
+
+  /**
+   * Eliminar imagen de una opción
+   */
+  eliminarImagenOpcion: async (imagenId) => {
+    const response = await api.delete(`/preguntas/opciones/imagenes/${imagenId}`);
+    return response.data;
+  },
+
+  /**
+   * Obtener URL de imagen para visualización
+   */
+  obtenerUrlImagen: (nombreArchivo) => {
+    return `${import.meta.env.VITE_API_URL}/uploads/evaluaciones/${nombreArchivo}`;
+  },
 };
 
 export default evaluacionesService;
