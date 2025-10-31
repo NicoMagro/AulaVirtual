@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { X, AlertCircle, Plus, Trash2, Info } from 'lucide-react';
+import { X, AlertCircle, Plus, Trash2, Info, Image as ImageIcon, Upload } from 'lucide-react';
 import evaluacionesService from '../../services/evaluacionesService';
 
 const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSuccess }) => {
@@ -22,6 +22,13 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Estados para gestión de imágenes
+  const [imagenesPregunta, setImagenesPregunta] = useState([]);
+  const [nuevasImagenesPregunta, setNuevasImagenesPregunta] = useState([]);
+  const [imagenesOpciones, setImagenesOpciones] = useState({}); // {opcion_id: [imagenes]}
+  const [nuevasImagenesOpciones, setNuevasImagenesOpciones] = useState({}); // {index: [files]}
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+
   useEffect(() => {
     if (pregunta) {
       // Modo edición
@@ -37,6 +44,20 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
           { texto: '', es_correcta: false, orden: 1 },
         ],
       });
+
+      // Cargar imágenes existentes
+      setImagenesPregunta(pregunta.imagenes || []);
+
+      // Cargar imágenes de opciones
+      if (pregunta.opciones) {
+        const imagenesOps = {};
+        pregunta.opciones.forEach((opcion) => {
+          if (opcion.id && opcion.imagenes) {
+            imagenesOps[opcion.id] = opcion.imagenes;
+          }
+        });
+        setImagenesOpciones(imagenesOps);
+      }
     } else {
       // Modo creación
       setFormData({
@@ -51,7 +72,14 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
           { texto: '', es_correcta: false, orden: 1 },
         ],
       });
+
+      setImagenesPregunta([]);
+      setImagenesOpciones({});
     }
+
+    // Limpiar imágenes nuevas al abrir/cerrar
+    setNuevasImagenesPregunta([]);
+    setNuevasImagenesOpciones({});
   }, [pregunta, isOpen]);
 
   const handleChange = (e) => {
@@ -107,6 +135,151 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
       ...formData,
       opciones: nuevasOpciones,
     });
+  };
+
+  // ==========================================
+  // GESTIÓN DE IMÁGENES - PREGUNTA
+  // ==========================================
+
+  const handleSeleccionarImagenPregunta = (e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+
+    // Validar tipo de archivo
+    if (!archivo.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+
+    // Validar tamaño (máximo 5MB)
+    if (archivo.size > 5 * 1024 * 1024) {
+      alert('La imagen no debe superar los 5MB');
+      return;
+    }
+
+    // Si estamos editando, subir inmediatamente
+    if (pregunta?.id) {
+      subirImagenPregunta(archivo);
+    } else {
+      // Si es una pregunta nueva, guardar para subir después
+      setNuevasImagenesPregunta([...nuevasImagenesPregunta, archivo]);
+    }
+
+    // Limpiar el input para permitir seleccionar el mismo archivo de nuevo
+    e.target.value = '';
+  };
+
+  const subirImagenPregunta = async (archivo) => {
+    setSubiendoImagen(true);
+    try {
+      const resultado = await evaluacionesService.subirImagenPregunta(pregunta.id, archivo);
+      setImagenesPregunta([...imagenesPregunta, resultado.data]);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al subir la imagen');
+      console.error(err);
+    } finally {
+      setSubiendoImagen(false);
+    }
+  };
+
+  const handleEliminarImagenPregunta = async (imagenId, index) => {
+    // Si es una imagen existente, eliminar del servidor
+    if (imagenId) {
+      if (!confirm('¿Estás seguro de eliminar esta imagen?')) return;
+
+      setSubiendoImagen(true);
+      try {
+        await evaluacionesService.eliminarImagenPregunta(imagenId);
+        setImagenesPregunta(imagenesPregunta.filter((img) => img.id !== imagenId));
+      } catch (err) {
+        alert(err.response?.data?.message || 'Error al eliminar la imagen');
+        console.error(err);
+      } finally {
+        setSubiendoImagen(false);
+      }
+    } else {
+      // Si es una imagen nueva (aún no subida), solo remover del array
+      setNuevasImagenesPregunta(nuevasImagenesPregunta.filter((_, i) => i !== index));
+    }
+  };
+
+  // ==========================================
+  // GESTIÓN DE IMÁGENES - OPCIONES
+  // ==========================================
+
+  const handleSeleccionarImagenOpcion = (opcionIndex, opcionId, e) => {
+    const archivo = e.target.files[0];
+    if (!archivo) return;
+
+    // Validar tipo de archivo
+    if (!archivo.type.startsWith('image/')) {
+      alert('Por favor selecciona un archivo de imagen válido');
+      return;
+    }
+
+    // Validar tamaño (máximo 5MB)
+    if (archivo.size > 5 * 1024 * 1024) {
+      alert('La imagen no debe superar los 5MB');
+      return;
+    }
+
+    // Si la opción tiene ID (existe en DB), subir inmediatamente
+    if (opcionId) {
+      subirImagenOpcion(opcionId, archivo);
+    } else {
+      // Si es una opción nueva, guardar para subir después
+      setNuevasImagenesOpciones({
+        ...nuevasImagenesOpciones,
+        [opcionIndex]: [...(nuevasImagenesOpciones[opcionIndex] || []), archivo],
+      });
+    }
+
+    // Limpiar el input
+    e.target.value = '';
+  };
+
+  const subirImagenOpcion = async (opcionId, archivo) => {
+    setSubiendoImagen(true);
+    try {
+      const resultado = await evaluacionesService.subirImagenOpcion(opcionId, archivo);
+      setImagenesOpciones({
+        ...imagenesOpciones,
+        [opcionId]: [...(imagenesOpciones[opcionId] || []), resultado.data],
+      });
+    } catch (err) {
+      alert(err.response?.data?.message || 'Error al subir la imagen');
+      console.error(err);
+    } finally {
+      setSubiendoImagen(false);
+    }
+  };
+
+  const handleEliminarImagenOpcion = async (opcionId, imagenId, opcionIndex, imagenIndex) => {
+    // Si es una imagen existente, eliminar del servidor
+    if (imagenId && opcionId) {
+      if (!confirm('¿Estás seguro de eliminar esta imagen?')) return;
+
+      setSubiendoImagen(true);
+      try {
+        await evaluacionesService.eliminarImagenOpcion(imagenId);
+        setImagenesOpciones({
+          ...imagenesOpciones,
+          [opcionId]: imagenesOpciones[opcionId].filter((img) => img.id !== imagenId),
+        });
+      } catch (err) {
+        alert(err.response?.data?.message || 'Error al eliminar la imagen');
+        console.error(err);
+      } finally {
+        setSubiendoImagen(false);
+      }
+    } else {
+      // Si es una imagen nueva, solo remover del array
+      const nuevasImgs = nuevasImagenesOpciones[opcionIndex].filter((_, i) => i !== imagenIndex);
+      setNuevasImagenesOpciones({
+        ...nuevasImagenesOpciones,
+        [opcionIndex]: nuevasImgs,
+      });
+    }
   };
 
   const validarFormulario = () => {
@@ -182,10 +355,46 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
         datos.respuesta_correcta = formData.respuesta_correcta;
       }
 
+      let preguntaCreada;
       if (esNuevo) {
-        await evaluacionesService.crearPregunta(datos);
+        const resultado = await evaluacionesService.crearPregunta(datos);
+        preguntaCreada = resultado.data;
       } else {
         await evaluacionesService.actualizarPregunta(pregunta.id, datos);
+      }
+
+      // Subir imágenes pendientes solo si es una pregunta nueva
+      if (esNuevo && preguntaCreada) {
+        // Subir imágenes de la pregunta
+        if (nuevasImagenesPregunta.length > 0) {
+          for (const imagen of nuevasImagenesPregunta) {
+            try {
+              await evaluacionesService.subirImagenPregunta(preguntaCreada.id, imagen);
+            } catch (imgErr) {
+              console.error('Error al subir imagen de pregunta:', imgErr);
+              // Continuar con las demás imágenes
+            }
+          }
+        }
+
+        // Subir imágenes de las opciones (solo para multiple choice)
+        if (formData.tipo_pregunta === 'multiple_choice' && preguntaCreada.opciones) {
+          for (let i = 0; i < preguntaCreada.opciones.length; i++) {
+            const opcion = preguntaCreada.opciones[i];
+            const imagenesOpcion = nuevasImagenesOpciones[i];
+
+            if (imagenesOpcion && imagenesOpcion.length > 0) {
+              for (const imagen of imagenesOpcion) {
+                try {
+                  await evaluacionesService.subirImagenOpcion(opcion.id, imagen);
+                } catch (imgErr) {
+                  console.error('Error al subir imagen de opción:', imgErr);
+                  // Continuar con las demás imágenes
+                }
+              }
+            }
+          }
+        }
       }
 
       onSuccess();
@@ -263,6 +472,82 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
               placeholder="Escribe la pregunta aquí..."
               required
             />
+
+            {/* Gestión de Imágenes de la Pregunta */}
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  <ImageIcon size={16} />
+                  Imágenes
+                </label>
+                <label className="flex items-center gap-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700 px-3 py-1 rounded-lg transition-colors cursor-pointer">
+                  <Upload size={14} />
+                  Agregar Imagen
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSeleccionarImagenPregunta}
+                    className="hidden"
+                    disabled={subiendoImagen}
+                  />
+                </label>
+              </div>
+
+              {/* Imágenes Existentes */}
+              {imagenesPregunta.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {imagenesPregunta.map((imagen) => (
+                    <div key={imagen.id} className="relative group">
+                      <img
+                        src={evaluacionesService.obtenerUrlImagen(imagen.nombre_archivo)}
+                        alt="Imagen de pregunta"
+                        className="w-full h-24 object-cover rounded-lg border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarImagenPregunta(imagen.id)}
+                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        disabled={subiendoImagen}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Nuevas Imágenes (Preview) */}
+              {nuevasImagenesPregunta.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {nuevasImagenesPregunta.map((archivo, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={URL.createObjectURL(archivo)}
+                        alt="Nueva imagen"
+                        className="w-full h-24 object-cover rounded-lg border border-blue-300"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarImagenPregunta(null, index)}
+                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={14} />
+                      </button>
+                      <div className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-2 py-0.5 rounded">
+                        Pendiente
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {subiendoImagen && (
+                <div className="text-sm text-gray-500 flex items-center gap-2 mt-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
+                  Subiendo imagen...
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Puntaje */}
@@ -315,36 +600,104 @@ const ModalCrearPregunta = ({ isOpen, onClose, evaluacion_id, pregunta, onSucces
 
               <div className="space-y-3">
                 {formData.opciones.map((opcion, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                    <span className="font-medium text-gray-600 mt-2">
-                      {String.fromCharCode(65 + index)}.
-                    </span>
-                    <input
-                      type="text"
-                      value={opcion.texto}
-                      onChange={(e) => handleOpcionChange(index, 'texto', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                      placeholder="Texto de la opción"
-                      required
-                    />
-                    <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap mt-2">
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg space-y-3">
+                    {/* Fila principal con texto y controles */}
+                    <div className="flex items-start gap-3">
+                      <span className="font-medium text-gray-600 mt-2">
+                        {String.fromCharCode(65 + index)}.
+                      </span>
                       <input
-                        type="checkbox"
-                        checked={opcion.es_correcta}
-                        onChange={(e) => handleOpcionChange(index, 'es_correcta', e.target.checked)}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        type="text"
+                        value={opcion.texto}
+                        onChange={(e) => handleOpcionChange(index, 'texto', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        placeholder="Texto de la opción"
+                        required
                       />
-                      <span className="text-sm text-gray-700">Correcta</span>
-                    </label>
-                    {formData.opciones.length > 2 && (
-                      <button
-                        type="button"
-                        onClick={() => handleEliminarOpcion(index)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                      <label className="flex items-center gap-2 cursor-pointer whitespace-nowrap mt-2">
+                        <input
+                          type="checkbox"
+                          checked={opcion.es_correcta}
+                          onChange={(e) => handleOpcionChange(index, 'es_correcta', e.target.checked)}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-gray-700">Correcta</span>
+                      </label>
+                      {formData.opciones.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => handleEliminarOpcion(index)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Gestión de Imágenes de la Opción */}
+                    <div className="pl-6">
+                      <div className="flex items-center gap-2 mb-2">
+                        <label className="flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-lg transition-colors cursor-pointer">
+                          <ImageIcon size={12} />
+                          Agregar Imagen
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleSeleccionarImagenOpcion(index, opcion.id, e)}
+                            className="hidden"
+                            disabled={subiendoImagen}
+                          />
+                        </label>
+                      </div>
+
+                      {/* Imágenes Existentes */}
+                      {opcion.id && imagenesOpciones[opcion.id] && imagenesOpciones[opcion.id].length > 0 && (
+                        <div className="grid grid-cols-4 gap-2 mb-2">
+                          {imagenesOpciones[opcion.id].map((imagen, imgIndex) => (
+                            <div key={imagen.id} className="relative group">
+                              <img
+                                src={evaluacionesService.obtenerUrlImagen(imagen.nombre_archivo)}
+                                alt={`Imagen opción ${String.fromCharCode(65 + index)}`}
+                                className="w-full h-16 object-cover rounded border border-gray-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarImagenOpcion(opcion.id, imagen.id, index, imgIndex)}
+                                className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                disabled={subiendoImagen}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Nuevas Imágenes (Preview) */}
+                      {nuevasImagenesOpciones[index] && nuevasImagenesOpciones[index].length > 0 && (
+                        <div className="grid grid-cols-4 gap-2">
+                          {nuevasImagenesOpciones[index].map((archivo, imgIndex) => (
+                            <div key={imgIndex} className="relative group">
+                              <img
+                                src={URL.createObjectURL(archivo)}
+                                alt="Nueva imagen"
+                                className="w-full h-16 object-cover rounded border border-blue-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleEliminarImagenOpcion(null, null, index, imgIndex)}
+                                className="absolute top-0.5 right-0.5 p-0.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X size={12} />
+                              </button>
+                              <div className="absolute bottom-0.5 left-0.5 bg-blue-500 text-white text-[10px] px-1 rounded">
+                                Pendiente
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

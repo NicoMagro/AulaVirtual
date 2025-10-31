@@ -319,7 +319,8 @@ const evaluacionesService = {
    * Obtener URL de imagen para visualización
    */
   obtenerUrlImagen: (nombreArchivo) => {
-    return `${import.meta.env.VITE_API_URL}/uploads/evaluaciones/${nombreArchivo}`;
+    // Nota: Los archivos estáticos se sirven desde /uploads, no /api/uploads
+    return `http://localhost:5001/uploads/evaluaciones/${nombreArchivo}`;
   },
 };
 
