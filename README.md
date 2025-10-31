@@ -517,7 +517,7 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas, evaluaciones, preguntas_banco, opciones_pregunta, intentos_evaluacion, preguntas_intento, respuestas_estudiante
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas, evaluaciones, preguntas_banco, opciones_pregunta, intentos_evaluacion, preguntas_intento, respuestas_estudiante, opciones_seleccionadas_estudiante, imagenes_preguntas, imagenes_opciones
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
@@ -526,6 +526,9 @@ El script `init.sql` crea:
 - Sistema de archivos con límite de 100 MB por archivo
 - Sistema de consultas públicas y privadas con respuestas e imágenes
 - Sistema completo de evaluaciones con tipos de preguntas múltiples
+- Soporte para múltiples opciones seleccionadas en preguntas de múltiple choice
+- Sistema de puntaje proporcional automático
+- Soporte de imágenes en preguntas y opciones de respuesta (hasta 10 MB por imagen)
 
 ### Usuarios de Prueba
 
@@ -663,6 +666,9 @@ npm run preview
 - ✅ Adjuntar imágenes a consultas y respuestas (hasta 10 MB por imagen)
 - ✅ Crear evaluaciones con configuración avanzada
 - ✅ Gestionar banco de preguntas (4 tipos)
+- ✅ Agregar imágenes a preguntas y opciones de respuesta
+- ✅ Configurar múltiples respuestas correctas en múltiple choice
+- ✅ Puntaje proporcional automático para respuestas parciales
 - ✅ Calificar respuestas abiertas manualmente
 - ✅ Ver estadísticas detalladas de evaluaciones
 - ✅ Exportar estadísticas a Excel y PDF con gráficos
@@ -683,7 +689,9 @@ npm run preview
 - ✅ Eliminar propias consultas y respuestas
 - ✅ Adjuntar imágenes a consultas y respuestas (hasta 10 MB por imagen)
 - ✅ Realizar evaluaciones con límite de tiempo
-- ✅ Ver mis notas y resultados
+- ✅ Seleccionar múltiples opciones en preguntas de múltiple choice
+- ✅ Ver imágenes en preguntas y opciones
+- ✅ Ver mis notas y resultados con puntaje proporcional
 - ✅ Ver respuestas correctas (si el profesor lo permite)
 - ✅ Realizar múltiples intentos (según configuración)
 
@@ -702,24 +710,78 @@ npm run preview
 
 1. **Multiple Choice (Opción Múltiple)**
    - Pregunta con múltiples opciones
-   - Solo una opción correcta
+   - **Soporte para múltiples respuestas correctas**
+   - Estudiantes pueden seleccionar múltiples opciones con checkboxes
+   - **Puntaje proporcional automático**: (opciones correctas seleccionadas / total opciones correctas) × puntaje
+   - Ejemplo: Si hay 3 opciones correctas y el estudiante marca 2 correctas, obtiene 66.67% del puntaje
+   - Solo cuenta las selecciones correctas (opciones incorrectas no penalizan)
    - Calificación automática
-   - Visualización con radio buttons
+   - Soporte de imágenes en el enunciado y en cada opción
 
 2. **Verdadero/Falso**
    - Pregunta con dos opciones
    - Calificación automática
    - Respuesta simple y directa
+   - Soporte de imágenes en el enunciado
 
 3. **Verdadero/Falso con Justificación**
    - Pregunta V/F con campo de texto adicional
    - Requiere justificación del estudiante
    - Calificación manual de la justificación
+   - Soporte de imágenes en el enunciado
 
 4. **Desarrollo (Respuesta Abierta)**
    - Campo de texto extenso
    - Respuesta libre del estudiante
    - Requiere calificación manual del profesor
+   - Soporte de imágenes en el enunciado
+
+### Sistema de Puntaje Proporcional
+
+Para preguntas de **múltiple choice con múltiples respuestas correctas**, el sistema implementa un algoritmo de puntaje proporcional justo:
+
+**Fórmula:**
+```
+Puntaje Obtenido = (Opciones Correctas Seleccionadas / Total Opciones Correctas) × Puntaje de la Pregunta
+```
+
+**Características:**
+- Solo cuenta las selecciones correctas (positivas)
+- Las opciones incorrectas seleccionadas no penalizan
+- Si el estudiante no marca ninguna correcta, obtiene 0 puntos
+- Si marca todas las correctas y ninguna incorrecta, obtiene 100% del puntaje
+
+**Ejemplos:**
+
+| Opciones Correctas | Seleccionadas Correctas | Seleccionadas Incorrectas | Puntaje (si vale 10 pts) |
+|-------------------|------------------------|---------------------------|--------------------------|
+| 3                 | 3                      | 0                         | 10.00 pts (100%)         |
+| 3                 | 2                      | 0                         | 6.67 pts (66.67%)        |
+| 3                 | 2                      | 1                         | 6.67 pts (66.67%)        |
+| 3                 | 1                      | 0                         | 3.33 pts (33.33%)        |
+| 3                 | 0                      | 3                         | 0.00 pts (0%)            |
+| 2                 | 1                      | 0                         | 5.00 pts (50%)           |
+
+**Visualización en Calificación:**
+- Los profesores ven todas las opciones seleccionadas
+- Código de colores: verde (correctas), rojo (incorrectas)
+- Muestra las opciones correctas que no fueron seleccionadas
+- Indica el puntaje proporcional calculado
+
+### Gestión de Imágenes en Evaluaciones
+
+**En Preguntas:**
+- Los profesores pueden subir múltiples imágenes al enunciado
+- Límite: 10 MB por imagen
+- Formatos soportados: JPEG, PNG, GIF, WebP
+- Las imágenes se muestran en una cuadrícula de 2 columnas
+- Los estudiantes pueden hacer clic para ver en tamaño completo
+
+**En Opciones de Respuesta:**
+- Cada opción de múltiple choice puede tener sus propias imágenes
+- Mismo límite y formatos que en preguntas
+- Las imágenes se muestran en una cuadrícula de 3 columnas
+- Útil para preguntas visuales (identificar imágenes, diagramas, etc.)
 
 ### Configuración de Evaluaciones
 
@@ -943,7 +1005,8 @@ Los profesores pueden configurar:
 **POST** `/api/intentos/:intento_id/respuesta`
 - Guardar respuesta de una pregunta
 - Acceso: Estudiante autor del intento
-- Body: `{ pregunta_id, respuesta_texto?, opcion_seleccionada_id?, justificacion? }`
+- Body: `{ pregunta_id, respuesta_texto?, opcion_seleccionada_id?, opciones_seleccionadas?, respuesta_booleana?, justificacion? }`
+- Para múltiple choice: usar `opciones_seleccionadas` como array de IDs para múltiples selecciones
 
 **POST** `/api/intentos/:intento_id/entregar`
 - Entregar el intento
@@ -970,6 +1033,46 @@ Los profesores pueden configurar:
 **POST** `/api/intentos/:intento_id/publicar`
 - Publicar resultados del intento (recalcular nota y cambiar estado)
 - Acceso: Profesores asignados al aula y admin
+
+### Imágenes en Evaluaciones
+
+**POST** `/api/preguntas/:pregunta_id/imagen`
+- Subir imagen a una pregunta
+- Acceso: Profesores asignados al aula
+- Content-Type: multipart/form-data
+- Body: FormData con campo 'imagen'
+- Límite: 10 MB por imagen
+- Formatos: JPEG, PNG, GIF, WebP
+
+**GET** `/api/preguntas/:pregunta_id/imagenes`
+- Obtener todas las imágenes de una pregunta
+- Acceso: Profesores asignados al aula
+- Respuesta: Array de objetos imagen con ID, nombre_archivo, etc.
+
+**DELETE** `/api/preguntas/imagenes/:imagen_id`
+- Eliminar imagen de una pregunta
+- Acceso: Profesores asignados al aula
+
+**POST** `/api/preguntas/opciones/:opcion_id/imagen`
+- Subir imagen a una opción de respuesta
+- Acceso: Profesores asignados al aula
+- Content-Type: multipart/form-data
+- Body: FormData con campo 'imagen'
+- Límite: 10 MB por imagen
+
+**GET** `/api/preguntas/opciones/:opcion_id/imagenes`
+- Obtener todas las imágenes de una opción
+- Acceso: Profesores asignados al aula
+
+**DELETE** `/api/preguntas/opciones/imagenes/:imagen_id`
+- Eliminar imagen de una opción
+- Acceso: Profesores asignados al aula
+
+**Visualización de imágenes:**
+- URL base: `http://localhost:5001/uploads/evaluaciones/`
+- Las imágenes son servidas como archivos estáticos
+- Los estudiantes pueden ver las imágenes durante la evaluación
+- Clic en la imagen abre en nueva pestaña para ver en tamaño completo
 
 ## Autor
 

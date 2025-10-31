@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { ArrowLeft, Clock, Send, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Send, Save, AlertCircle, CheckCircle, Image as ImageIcon } from 'lucide-react';
 import evaluacionesService from '../../services/evaluacionesService';
 
 const RealizarEvaluacion = ({ evaluacion, onVolver }) => {
@@ -83,11 +83,30 @@ const RealizarEvaluacion = ({ evaluacion, onVolver }) => {
       const respuestasExistentes = {};
       intentoResponse.data.preguntas.forEach(pregunta => {
         if (pregunta.respuesta_estudiante) {
-          respuestasExistentes[pregunta.id] = {
-            opcion_seleccionada_id: pregunta.respuesta_estudiante.opcion_seleccionada_id,
+          const respuestaBase = {
             respuesta_booleana: pregunta.respuesta_estudiante.respuesta_booleana,
             respuesta_texto: pregunta.respuesta_estudiante.respuesta_texto || '',
             justificacion: pregunta.respuesta_estudiante.justificacion || '',
+          };
+
+          // Para multiple choice, soportar tanto múltiples IDs como un ID único (legacy)
+          if (pregunta.tipo_pregunta === 'multiple_choice') {
+            if (pregunta.respuesta_estudiante.opciones_seleccionadas && pregunta.respuesta_estudiante.opciones_seleccionadas.length > 0) {
+              // Usar el array de opciones seleccionadas si existe
+              respuestaBase.opciones_seleccionadas = pregunta.respuesta_estudiante.opciones_seleccionadas;
+            } else if (pregunta.respuesta_estudiante.opcion_seleccionada_id) {
+              // Fallback para compatibilidad con datos antiguos
+              respuestaBase.opciones_seleccionadas = [pregunta.respuesta_estudiante.opcion_seleccionada_id];
+            } else {
+              respuestaBase.opciones_seleccionadas = [];
+            }
+          }
+
+          respuestasExistentes[pregunta.id] = respuestaBase;
+        } else if (pregunta.tipo_pregunta === 'multiple_choice') {
+          // Inicializar array vacío para nuevas preguntas de multiple choice
+          respuestasExistentes[pregunta.id] = {
+            opciones_seleccionadas: [],
           };
         }
       });
@@ -288,6 +307,26 @@ const RealizarEvaluacion = ({ evaluacion, onVolver }) => {
               <span className="text-lg font-bold text-gray-400">#{index + 1}</span>
               <div className="flex-1">
                 <p className="text-gray-900 font-medium mb-2">{pregunta.enunciado}</p>
+
+                {/* Imágenes de la pregunta */}
+                {pregunta.imagenes && pregunta.imagenes.length > 0 && (
+                  <div className="grid grid-cols-2 gap-2 my-3">
+                    {pregunta.imagenes.map((imagen) => (
+                      <div key={imagen.id} className="relative group">
+                        <img
+                          src={evaluacionesService.obtenerUrlImagen(imagen.nombre_archivo)}
+                          alt="Imagen de pregunta"
+                          className="w-full rounded-lg border border-gray-200 cursor-pointer"
+                          onClick={(e) => window.open(e.target.src, '_blank')}
+                        />
+                        <div className="absolute top-1 right-1 bg-white bg-opacity-80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <ImageIcon size={14} className="text-gray-600" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <span className="text-xs text-gray-500">
                   {pregunta.puntaje} {pregunta.puntaje === 1 ? 'punto' : 'puntos'}
                 </span>
@@ -297,21 +336,62 @@ const RealizarEvaluacion = ({ evaluacion, onVolver }) => {
             {/* Opciones según tipo de pregunta */}
             {pregunta.tipo_pregunta === 'multiple_choice' && (
               <div className="space-y-2">
-                {pregunta.opciones.map((opcion) => (
-                  <label
-                    key={opcion.id}
-                    className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                  >
-                    <input
-                      type="radio"
-                      name={`pregunta_${pregunta.id}`}
-                      checked={respuestas[pregunta.id]?.opcion_seleccionada_id === opcion.id}
-                      onChange={() => handleRespuestaChange(pregunta.id, 'opcion_seleccionada_id', opcion.id)}
-                      className="w-4 h-4 text-primary-600"
-                    />
-                    <span>{opcion.texto}</span>
-                  </label>
-                ))}
+                {pregunta.opciones.map((opcion) => {
+                  const opcionesSeleccionadas = respuestas[pregunta.id]?.opciones_seleccionadas || [];
+                  const isChecked = opcionesSeleccionadas.includes(opcion.id);
+
+                  return (
+                    <label
+                      key={opcion.id}
+                      className={`flex items-start gap-3 p-3 border-2 rounded-lg hover:bg-gray-50 cursor-pointer ${
+                        isChecked ? 'border-primary-500 bg-primary-50' : 'border-gray-200'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          const currentSelections = respuestas[pregunta.id]?.opciones_seleccionadas || [];
+                          let newSelections;
+
+                          if (e.target.checked) {
+                            newSelections = [...currentSelections, opcion.id];
+                          } else {
+                            newSelections = currentSelections.filter(id => id !== opcion.id);
+                          }
+
+                          handleRespuestaChange(pregunta.id, 'opciones_seleccionadas', newSelections);
+                        }}
+                        className="w-4 h-4 text-primary-600 mt-1 flex-shrink-0"
+                      />
+                      <div className="flex-1">
+                        <span className="text-gray-900">{opcion.texto}</span>
+
+                        {/* Imágenes de la opción */}
+                        {opcion.imagenes && opcion.imagenes.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2 mt-2">
+                            {opcion.imagenes.map((imagen) => (
+                              <div key={imagen.id} className="relative group">
+                                <img
+                                  src={evaluacionesService.obtenerUrlImagen(imagen.nombre_archivo)}
+                                  alt="Imagen de opción"
+                                  className="w-full h-20 object-cover rounded border border-gray-200 cursor-pointer"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    window.open(e.target.src, '_blank');
+                                  }}
+                                />
+                                <div className="absolute top-0.5 right-0.5 bg-white bg-opacity-80 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <ImageIcon size={12} className="text-gray-600" />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             )}
 

@@ -284,6 +284,15 @@ const obtenerIntento = async (req, res) => {
 
         if (respuesta.rows.length > 0) {
           preguntaData.respuesta_estudiante = respuesta.rows[0];
+
+          // Si es multiple choice, obtener las opciones seleccionadas
+          if (pregunta.tipo_pregunta === 'multiple_choice') {
+            const opcionesSeleccionadas = await db.query(
+              'SELECT opcion_id FROM opciones_seleccionadas_estudiante WHERE respuesta_id = $1',
+              [respuesta.rows[0].id]
+            );
+            preguntaData.respuesta_estudiante.opciones_seleccionadas = opcionesSeleccionadas.rows.map(o => o.opcion_id);
+          }
         }
 
         // Solo mostrar respuestas correctas si el intento está calificado/publicado
@@ -347,7 +356,7 @@ const guardarRespuesta = async (req, res) => {
   }
 
   const { intento_id } = req.params;
-  const { pregunta_id, opcion_seleccionada_id, respuesta_booleana, respuesta_texto, justificacion } = req.body;
+  const { pregunta_id, opcion_seleccionada_id, opciones_seleccionadas, respuesta_booleana, respuesta_texto, justificacion } = req.body;
   const estudiante_id = req.usuario.id;
 
   try {
@@ -390,6 +399,8 @@ const guardarRespuesta = async (req, res) => {
       [intento_id, pregunta_id]
     );
 
+    let respuestaId;
+
     if (respuestaExistente.rows.length > 0) {
       // Actualizar respuesta existente
       await db.query(
@@ -399,14 +410,36 @@ const guardarRespuesta = async (req, res) => {
          WHERE intento_id = $5 AND pregunta_id = $6`,
         [respuesta_texto || null, opcion_seleccionada_id || null, respuesta_booleana, justificacion || null, intento_id, pregunta_id]
       );
+      respuestaId = respuestaExistente.rows[0].id;
     } else {
       // Crear nueva respuesta
-      await db.query(
+      const nuevaRespuesta = await db.query(
         `INSERT INTO respuestas_estudiante
          (intento_id, pregunta_id, respuesta_texto, opcion_seleccionada_id, respuesta_booleana, justificacion)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
         [intento_id, pregunta_id, respuesta_texto || null, opcion_seleccionada_id || null, respuesta_booleana, justificacion || null]
       );
+      respuestaId = nuevaRespuesta.rows[0].id;
+    }
+
+    // Si hay opciones seleccionadas (múltiple choice con múltiples selecciones)
+    if (opciones_seleccionadas && Array.isArray(opciones_seleccionadas) && opciones_seleccionadas.length > 0) {
+      // Primero eliminar las selecciones anteriores
+      await db.query(
+        'DELETE FROM opciones_seleccionadas_estudiante WHERE respuesta_id = $1',
+        [respuestaId]
+      );
+
+      // Insertar las nuevas selecciones
+      for (const opcionId of opciones_seleccionadas) {
+        await db.query(
+          `INSERT INTO opciones_seleccionadas_estudiante (respuesta_id, opcion_id)
+           VALUES ($1, $2)
+           ON CONFLICT (respuesta_id, opcion_id) DO NOTHING`,
+          [respuestaId, opcionId]
+        );
+      }
     }
 
     res.status(200).json({
@@ -505,25 +538,43 @@ const entregarIntento = async (req, res) => {
 
       // Calificar según tipo
       if (pregunta.tipo_pregunta === 'multiple_choice') {
-        // Verificar si la opción seleccionada es correcta
-        if (respuestaData.opcion_seleccionada_id) {
-          const opcionCorrecta = await db.query(
-            'SELECT es_correcta FROM opciones_pregunta WHERE id = $1',
-            [respuestaData.opcion_seleccionada_id]
+        // Obtener todas las opciones correctas de la pregunta
+        const opcionesCorrectas = await db.query(
+          'SELECT id FROM opciones_pregunta WHERE pregunta_id = $1 AND es_correcta = true',
+          [pregunta.id]
+        );
+
+        const opcionesCorrectasIds = opcionesCorrectas.rows.map(o => o.id);
+        const totalOpcionesCorrectas = opcionesCorrectasIds.length;
+
+        // Obtener opciones seleccionadas por el estudiante desde la nueva tabla
+        const opcionesSeleccionadas = await db.query(
+          'SELECT opcion_id FROM opciones_seleccionadas_estudiante WHERE respuesta_id = $1',
+          [respuestaData.id]
+        );
+
+        let opcionesSeleccionadasIds = opcionesSeleccionadas.rows.map(o => o.opcion_id);
+
+        // Si no hay opciones en la nueva tabla, usar el campo legacy opcion_seleccionada_id
+        if (opcionesSeleccionadasIds.length === 0 && respuestaData.opcion_seleccionada_id) {
+          opcionesSeleccionadasIds = [respuestaData.opcion_seleccionada_id];
+        }
+
+        if (opcionesSeleccionadasIds.length > 0 && totalOpcionesCorrectas > 0) {
+          // Contar cuántas opciones correctas seleccionó
+          const opcionesCorrectasSeleccionadas = opcionesSeleccionadasIds.filter(id =>
+            opcionesCorrectasIds.includes(id)
           );
 
-          if (opcionCorrecta.rows.length > 0 && opcionCorrecta.rows[0].es_correcta) {
-            puntajeObtenido += parseFloat(pregunta.puntaje);
-            await db.query(
-              'UPDATE respuestas_estudiante SET puntaje_obtenido = $1, es_correcta = true WHERE id = $2',
-              [pregunta.puntaje, respuestaData.id]
-            );
-          } else {
-            await db.query(
-              'UPDATE respuestas_estudiante SET puntaje_obtenido = 0, es_correcta = false WHERE id = $1',
-              [respuestaData.id]
-            );
-          }
+          // Calcular puntaje proporcional: (correctas seleccionadas / total correctas) * puntaje
+          const puntajeProporcional = (opcionesCorrectasSeleccionadas.length / totalOpcionesCorrectas) * parseFloat(pregunta.puntaje);
+          const esCorrecta = opcionesCorrectasSeleccionadas.length === totalOpcionesCorrectas && opcionesSeleccionadasIds.length === totalOpcionesCorrectas;
+
+          puntajeObtenido += puntajeProporcional;
+          await db.query(
+            'UPDATE respuestas_estudiante SET puntaje_obtenido = $1, es_correcta = $2 WHERE id = $3',
+            [puntajeProporcional, esCorrecta, respuestaData.id]
+          );
         } else {
           await db.query(
             'UPDATE respuestas_estudiante SET puntaje_obtenido = 0, es_correcta = false WHERE id = $1',
@@ -816,6 +867,15 @@ const obtenerIntentoParaCalificar = async (req, res) => {
 
         if (respuesta.rows.length > 0) {
           preguntaData.respuesta_estudiante = respuesta.rows[0];
+
+          // Si es multiple choice, obtener las opciones seleccionadas
+          if (pregunta.tipo_pregunta === 'multiple_choice') {
+            const opcionesSeleccionadas = await db.query(
+              'SELECT opcion_id FROM opciones_seleccionadas_estudiante WHERE respuesta_id = $1',
+              [respuesta.rows[0].id]
+            );
+            preguntaData.respuesta_estudiante.opciones_seleccionadas = opcionesSeleccionadas.rows.map(o => o.opcion_id);
+          }
         }
 
         return preguntaData;

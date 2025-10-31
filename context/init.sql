@@ -543,6 +543,19 @@ CREATE TABLE respuestas_estudiante (
 );
 
 -- ============================================
+-- Tabla: opciones_seleccionadas_estudiante
+-- Relación muchos-a-muchos entre respuestas y opciones seleccionadas
+-- Permite múltiples opciones seleccionadas en preguntas de múltiple choice
+-- ============================================
+CREATE TABLE opciones_seleccionadas_estudiante (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    respuesta_id UUID REFERENCES respuestas_estudiante(id) ON DELETE CASCADE NOT NULL,
+    opcion_id UUID REFERENCES opciones_pregunta(id) ON DELETE CASCADE NOT NULL,
+    fecha_seleccion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT opcion_seleccionada_unica UNIQUE (respuesta_id, opcion_id)
+);
+
+-- ============================================
 -- Tabla: imagenes_respuestas
 -- Imágenes adjuntas a respuestas de estudiantes (para preguntas de desarrollo)
 -- ============================================
@@ -644,6 +657,12 @@ CREATE INDEX idx_respuestas_pregunta ON respuestas_estudiante(pregunta_id);
 CREATE INDEX idx_respuestas_opcion ON respuestas_estudiante(opcion_seleccionada_id);
 
 -- ============================================
+-- Índices para opciones_seleccionadas_estudiante
+-- ============================================
+CREATE INDEX idx_opciones_seleccionadas_respuesta ON opciones_seleccionadas_estudiante(respuesta_id);
+CREATE INDEX idx_opciones_seleccionadas_opcion ON opciones_seleccionadas_estudiante(opcion_id);
+
+-- ============================================
 -- Índices para imagenes_respuestas
 -- ============================================
 CREATE INDEX idx_imagenes_respuestas_respuesta ON imagenes_respuestas(respuesta_id);
@@ -696,10 +715,14 @@ COMMENT ON COLUMN preguntas_intento.orden_mostrado IS 'Orden en que se mostraron
 
 COMMENT ON TABLE respuestas_estudiante IS 'Respuestas del estudiante en un intento';
 COMMENT ON COLUMN respuestas_estudiante.respuesta_texto IS 'Respuesta de texto libre (para preguntas de desarrollo)';
-COMMENT ON COLUMN respuestas_estudiante.opcion_seleccionada_id IS 'Opción seleccionada (para multiple choice)';
+COMMENT ON COLUMN respuestas_estudiante.opcion_seleccionada_id IS 'Opción seleccionada (para multiple choice - campo legacy, usar opciones_seleccionadas_estudiante para múltiples opciones)';
 COMMENT ON COLUMN respuestas_estudiante.respuesta_booleana IS 'Respuesta true/false (para V/F)';
 COMMENT ON COLUMN respuestas_estudiante.justificacion IS 'Justificación del estudiante (para V/F con justificación)';
 COMMENT ON COLUMN respuestas_estudiante.retroalimentacion_profesor IS 'Retroalimentación del profesor al calificar';
+
+COMMENT ON TABLE opciones_seleccionadas_estudiante IS 'Opciones seleccionadas por el estudiante en preguntas de múltiple choice (permite múltiples selecciones)';
+COMMENT ON COLUMN opciones_seleccionadas_estudiante.respuesta_id IS 'ID de la respuesta del estudiante';
+COMMENT ON COLUMN opciones_seleccionadas_estudiante.opcion_id IS 'ID de la opción seleccionada';
 
 COMMENT ON TABLE imagenes_respuestas IS 'Imágenes adjuntas a respuestas de desarrollo';
 
@@ -727,7 +750,7 @@ BEGIN
     RAISE NOTICE 'Tablas básicas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes';
     RAISE NOTICE 'Tablas de contenido: hojas_aula, contenido_aulas, archivos_aula';
     RAISE NOTICE 'Tablas de consultas: consultas, respuestas_consultas, imagenes_consultas';
-    RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, imagenes_respuestas, imagenes_preguntas, imagenes_opciones';
+    RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, opciones_seleccionadas_estudiante, imagenes_respuestas, imagenes_preguntas, imagenes_opciones';
     RAISE NOTICE 'Roles insertados: admin, profesor, estudiante';
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Sistema de hojas por aula:';
@@ -736,8 +759,11 @@ BEGIN
     RAISE NOTICE '===========================================';
     RAISE NOTICE 'Sistema de evaluaciones:';
     RAISE NOTICE '  - 4 tipos de preguntas: multiple_choice, verdadero_falso, verdadero_falso_justificacion, desarrollo';
+    RAISE NOTICE '  - Soporte para múltiples opciones seleccionadas en preguntas de múltiple choice';
+    RAISE NOTICE '  - Puntaje proporcional: (opciones correctas seleccionadas / total opciones correctas) * puntaje';
     RAISE NOTICE '  - Calificación automática para MC y V/F, manual para desarrollo y V/F con justificación';
     RAISE NOTICE '  - Estados de intento: en_progreso, entregado, calificado';
     RAISE NOTICE '  - Estados de evaluación: borrador, publicado, cerrado';
+    RAISE NOTICE '  - Soporte de imágenes en preguntas y opciones de respuesta';
     RAISE NOTICE '===========================================';
 END $$;

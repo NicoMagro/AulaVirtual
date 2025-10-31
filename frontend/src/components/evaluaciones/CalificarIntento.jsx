@@ -10,10 +10,48 @@ const CalificarIntento = ({ intento: intentoInicial, onVolver, onPublicar }) => 
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+  const [puntajeCalculado, setPuntajeCalculado] = useState(0);
+  const [notaCalculada, setNotaCalculada] = useState(0);
+
+  // Función para determinar si una pregunta requiere calificación manual
+  const requiereCalificacionManual = (pregunta) => {
+    return pregunta.tipo_pregunta === 'desarrollo' || pregunta.tipo_pregunta === 'verdadero_falso_justificacion';
+  };
 
   useEffect(() => {
     cargarIntentoCompleto();
   }, [intentoInicial.id]);
+
+  // Calcular puntaje y nota en tiempo real cuando cambien las calificaciones
+  useEffect(() => {
+    if (!preguntas.length || !intento) return;
+
+    let totalPuntaje = 0;
+
+    preguntas.forEach((pregunta) => {
+      if (!pregunta.respuesta_estudiante) return;
+
+      const respuestaId = pregunta.respuesta_estudiante.id;
+
+      // Si es una pregunta de calificación manual, usar el valor del estado local
+      if (requiereCalificacionManual(pregunta)) {
+        const calificacionLocal = calificaciones[respuestaId];
+        if (calificacionLocal && calificacionLocal.puntaje_obtenido !== undefined) {
+          totalPuntaje += parseFloat(calificacionLocal.puntaje_obtenido) || 0;
+        }
+      } else {
+        // Si es automática, usar el puntaje ya guardado en la respuesta
+        totalPuntaje += parseFloat(pregunta.respuesta_estudiante.puntaje_obtenido) || 0;
+      }
+    });
+
+    // Calcular la nota (puntaje sobre 10)
+    const puntajeTotal = intento.puntaje_total || 1; // Evitar división por 0
+    const nota = (totalPuntaje / puntajeTotal) * 10;
+
+    setPuntajeCalculado(totalPuntaje);
+    setNotaCalculada(nota);
+  }, [calificaciones, preguntas, intento]);
 
   const cargarIntentoCompleto = async () => {
     try {
@@ -109,36 +147,74 @@ const CalificarIntento = ({ intento: intentoInicial, onVolver, onPublicar }) => 
     }
 
     if (pregunta.tipo_pregunta === 'multiple_choice') {
-      const opcionSeleccionada = pregunta.opciones?.find((o) => o.id === respuesta.opcion_seleccionada_id);
+      // Obtener IDs de opciones seleccionadas (soporte para múltiples selecciones)
+      let opcionesSeleccionadasIds = respuesta.opciones_seleccionadas || [];
+
+      // Fallback para compatibilidad con datos antiguos
+      if (opcionesSeleccionadasIds.length === 0 && respuesta.opcion_seleccionada_id) {
+        opcionesSeleccionadasIds = [respuesta.opcion_seleccionada_id];
+      }
+
+      // Obtener las opciones correctas
+      const opcionesCorrectasIds = pregunta.opciones?.filter(o => o.es_correcta).map(o => o.id) || [];
+
+      // Clasificar las opciones seleccionadas
+      const opcionesSeleccionadasCorrectas = opcionesSeleccionadasIds.filter(id => opcionesCorrectasIds.includes(id));
+      const opcionesSeleccionadasIncorrectas = opcionesSeleccionadasIds.filter(id => !opcionesCorrectasIds.includes(id));
+
       return (
-        <div>
-          <p className="font-medium mb-2">Respuesta seleccionada:</p>
-          <div className={`p-3 rounded-lg border-2 ${
-            respuesta.es_correcta
-              ? 'bg-green-50 border-green-300'
-              : 'bg-red-50 border-red-300'
-          }`}>
-            <div className="flex items-center gap-2">
-              {respuesta.es_correcta ? (
-                <CheckCircle size={18} className="text-green-600" />
-              ) : (
-                <XCircle size={18} className="text-red-600" />
-              )}
-              <span>{opcionSeleccionada?.texto || 'Opción no encontrada'}</span>
+        <div className="space-y-3">
+          <p className="font-medium">Opciones seleccionadas por el estudiante:</p>
+
+          {opcionesSeleccionadasIds.length === 0 ? (
+            <p className="text-gray-500 italic">No seleccionó ninguna opción</p>
+          ) : (
+            <div className="space-y-2">
+              {opcionesSeleccionadasIds.map((opcionId) => {
+                const opcion = pregunta.opciones?.find((o) => o.id === opcionId);
+                const esCorrecta = opcionesCorrectasIds.includes(opcionId);
+
+                return (
+                  <div
+                    key={opcionId}
+                    className={`p-3 rounded-lg border-2 ${
+                      esCorrecta
+                        ? 'bg-green-50 border-green-300'
+                        : 'bg-red-50 border-red-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {esCorrecta ? (
+                        <CheckCircle size={18} className="text-green-600" />
+                      ) : (
+                        <XCircle size={18} className="text-red-600" />
+                      )}
+                      <span>{opcion?.texto || 'Opción no encontrada'}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-          {!respuesta.es_correcta && (
-            <div className="mt-2">
-              <p className="font-medium text-sm">Respuesta(s) correcta(s):</p>
+          )}
+
+          {/* Mostrar respuestas correctas que no fueron seleccionadas */}
+          {opcionesCorrectasIds.length > opcionesSeleccionadasCorrectas.length && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="font-medium text-sm text-blue-900 mb-2">Respuestas correctas no seleccionadas:</p>
               {pregunta.opciones
-                ?.filter((o) => o.es_correcta)
+                ?.filter((o) => o.es_correcta && !opcionesSeleccionadasIds.includes(o.id))
                 .map((o) => (
-                  <p key={o.id} className="text-sm text-green-700">
+                  <p key={o.id} className="text-sm text-blue-700">
                     • {o.texto}
                   </p>
                 ))}
             </div>
           )}
+
+          {/* Resumen del puntaje proporcional */}
+          <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded">
+            <span className="font-medium">Puntaje proporcional:</span> {opcionesSeleccionadasCorrectas.length} de {opcionesCorrectasIds.length} correctas = {respuesta.puntaje_obtenido || 0} pts
+          </div>
         </div>
       );
     }
@@ -193,10 +269,6 @@ const CalificarIntento = ({ intento: intentoInicial, onVolver, onPublicar }) => 
     }
 
     return null;
-  };
-
-  const requiereCalificacionManual = (pregunta) => {
-    return pregunta.tipo_pregunta === 'desarrollo' || pregunta.tipo_pregunta === 'verdadero_falso_justificacion';
   };
 
   if (loading && !intento) {
@@ -255,18 +327,21 @@ const CalificarIntento = ({ intento: intentoInicial, onVolver, onPublicar }) => 
             <div>
               <p className="text-sm text-gray-600">Puntaje Obtenido</p>
               <p className="text-2xl font-bold text-primary-600">
-                {intento?.puntaje_obtenido || 0} / {intento?.puntaje_total}
+                {puntajeCalculado.toFixed(2)} / {intento?.puntaje_total}
               </p>
             </div>
-            {intento?.nota_obtenida !== null && (
-              <div className="text-right">
-                <p className="text-sm text-gray-600">Nota Final</p>
-                <p className="text-2xl font-bold text-primary-600">
-                  {parseFloat(intento?.nota_obtenida).toFixed(2)} / 10
-                </p>
-              </div>
-            )}
+            <div className="text-right">
+              <p className="text-sm text-gray-600">Nota Final</p>
+              <p className="text-2xl font-bold text-primary-600">
+                {notaCalculada.toFixed(2)} / 10
+              </p>
+            </div>
           </div>
+          {intento?.estado === 'entregado' && (
+            <p className="text-xs text-gray-500 mt-2">
+              * La nota se actualiza automáticamente mientras calificas
+            </p>
+          )}
         </div>
       </div>
 

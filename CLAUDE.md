@@ -1,0 +1,1 @@
+- Se consistente siempre con los nombres y siempre revisa en la Base de Datos los campos de las tablas antes de hacer una consulta.
