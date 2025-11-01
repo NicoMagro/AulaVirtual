@@ -38,6 +38,9 @@ graph TB
         W[(intentos_evaluacion)]
         X[(preguntas_intento)]
         Y[(respuestas_estudiante)]
+        Z[(opciones_seleccionadas_estudiante)]
+        AA[(imagenes_preguntas)]
+        AB[(imagenes_opciones)]
     end
 
     A --> C
@@ -63,6 +66,9 @@ graph TB
     F --> W
     F --> X
     F --> Y
+    F --> Z
+    F --> AA
+    F --> AB
     H -.-> G
 ```
 
@@ -84,6 +90,8 @@ erDiagram
     usuarios ||--o{ evaluaciones : crea
     usuarios ||--o{ intentos_evaluacion : realiza
     usuarios ||--o{ respuestas_estudiante : responde
+    usuarios ||--o{ imagenes_preguntas : sube
+    usuarios ||--o{ imagenes_opciones : sube
 
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
@@ -109,11 +117,17 @@ erDiagram
 
     preguntas_banco ||--o{ opciones_pregunta : tiene
     preguntas_banco ||--o{ preguntas_intento : genera
+    preguntas_banco ||--o{ imagenes_preguntas : contiene
+
+    opciones_pregunta ||--o{ imagenes_opciones : contiene
+    opciones_pregunta ||--o{ opciones_seleccionadas_estudiante : registra
 
     intentos_evaluacion ||--o{ preguntas_intento : contiene
     intentos_evaluacion ||--o{ respuestas_estudiante : registra
 
     preguntas_intento ||--o{ respuestas_estudiante : recibe
+
+    respuestas_estudiante ||--o{ opciones_seleccionadas_estudiante : tiene
 
     usuarios {
         uuid id PK
@@ -224,11 +238,43 @@ erDiagram
         uuid pregunta_id FK
         text respuesta_texto
         uuid opcion_seleccionada_id FK
+        boolean respuesta_booleana
         text justificacion
         boolean es_correcta
         numeric puntaje_obtenido
-        text retroalimentacion
+        text retroalimentacion_profesor
+        uuid calificado_por FK
+        timestamp fecha_calificacion
         timestamp fecha_respuesta
+    }
+
+    opciones_seleccionadas_estudiante {
+        uuid id PK
+        uuid respuesta_id FK
+        uuid opcion_id FK
+        timestamp fecha_seleccion
+    }
+
+    imagenes_preguntas {
+        uuid id PK
+        uuid pregunta_id FK
+        varchar nombre_original
+        varchar nombre_archivo UK
+        varchar tipo_mime
+        bigint tamano_bytes
+        uuid subido_por FK
+        timestamp fecha_subida
+    }
+
+    imagenes_opciones {
+        uuid id PK
+        uuid opcion_id FK
+        varchar nombre_original
+        varchar nombre_archivo UK
+        varchar tipo_mime
+        bigint tamano_bytes
+        uuid subido_por FK
+        timestamp fecha_subida
     }
 ```
 
