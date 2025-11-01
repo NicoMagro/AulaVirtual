@@ -26,3 +26,6 @@ Thumbs.db
 
 # Context files (if you want to keep them private)
 context/
+
+# Personal information files
+redes.md
