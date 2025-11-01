@@ -17,10 +17,8 @@ export const ThemeProvider = ({ children }) => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) return savedTheme;
 
-    // Si no hay tema guardado, usar preferencia del sistema
-    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
+    // Si no hay tema guardado, usar siempre 'light' por defecto
+    // (ignorar preferencias del sistema operativo)
     return 'light';
   });
 

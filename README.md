@@ -440,6 +440,39 @@ graph TB
 - Lucide React (iconos)
 - @dnd-kit (drag and drop)
 - PropTypes (validación de tipos)
+- Framer Motion (animaciones)
+- React Intersection Observer (parallax scrolling)
+
+## Landing Page
+
+La aplicación cuenta con una landing page moderna y atractiva con las siguientes características:
+
+### Diseño y Animaciones
+- **Efecto Parallax**: Scroll suave con figuras geométricas decorativas en movimiento
+- **Animaciones con Framer Motion**: Transiciones fluidas y efectos visuales profesionales
+- **Modo Oscuro Automático**: Detección automática de las preferencias del sistema operativo
+- **Diseño Responsivo**: Adaptable a todos los tamaños de pantalla
+
+### Secciones
+1. **Hero Section**: Presentación principal con llamados a la acción
+2. **Cómo Funciona**: Explicación del sistema para profesores y estudiantes
+3. **Beneficios**: Características clave del sistema
+4. **Características**: Funcionalidades detalladas
+5. **Estadísticas**: Métricas e impacto del proyecto
+6. **Contacto**: Links a redes sociales (Email, LinkedIn, GitHub)
+7. **Footer**: Navegación y información adicional
+
+### Variables de Entorno
+La landing page utiliza variables de entorno para los datos de contacto. Crear un archivo `.env` en `frontend/`:
+
+```env
+# Datos de contacto para la Landing Page
+VITE_CONTACT_EMAIL=tu-email@ejemplo.com
+VITE_CONTACT_LINKEDIN=https://www.linkedin.com/in/tu-perfil
+VITE_CONTACT_GITHUB=https://github.com/tu-usuario
+```
+
+**Nota**: El archivo `.env` está en `.gitignore` y no se sube al repositorio. Usa `.env.example` como referencia.
 
 ## Estructura del Proyecto
 
@@ -488,6 +521,9 @@ AulaVirtual/
 │   │   │   ├── admin/        # Componentes específicos de admin
 │   │   │   ├── profesor/     # Componentes específicos de profesor
 │   │   │   ├── estudiante/   # Componentes específicos de estudiante
+│   │   │   ├── landing/      # Componentes de la landing page
+│   │   │   │   ├── LandingNavbar.jsx
+│   │   │   │   └── ParallaxSection.jsx
 │   │   │   ├── contenido/    # Componentes de bloques de contenido
 │   │   │   │   ├── BloqueContenido.jsx
 │   │   │   │   ├── ModalEditarBloque.jsx
@@ -506,10 +542,13 @@ AulaVirtual/
 │   │   │   │   ├── CalificarIntento.jsx
 │   │   │   │   └── EstadisticasEvaluacion.jsx
 │   │   │   ├── Layout.jsx
-│   │   │   └── ProtectedRoute.jsx
-│   │   ├── contexts/         # Context API (autenticación)
-│   │   │   └── AuthContext.jsx
+│   │   │   ├── ProtectedRoute.jsx
+│   │   │   └── ThemeToggle.jsx (no usado actualmente)
+│   │   ├── contexts/         # Context API
+│   │   │   ├── AuthContext.jsx
+│   │   │   └── ThemeContext.jsx
 │   │   ├── pages/            # Páginas de la aplicación
+│   │   │   ├── LandingPage.jsx # Landing page pública
 │   │   │   ├── admin/        # Páginas de admin
 │   │   │   │   ├── GestionAulas.jsx
 │   │   │   │   └── GestionUsuarios.jsx

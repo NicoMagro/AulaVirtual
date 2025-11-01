@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import ThemeToggle from '../ThemeToggle';
 
 const LandingNavbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -55,7 +54,7 @@ const LandingNavbar = () => {
               <span className={`text-xl font-bold transition-colors ${
                 isScrolled
                   ? 'text-gray-900 dark:text-white'
-                  : 'text-white'
+                  : 'text-gray-900 dark:text-white'
               }`}>
                 AulaVirtual
               </span>
@@ -70,7 +69,7 @@ const LandingNavbar = () => {
                   className={`text-sm font-medium transition-colors hover:text-primary-600 dark:hover:text-primary-400 ${
                     isScrolled
                       ? 'text-gray-700 dark:text-gray-300'
-                      : 'text-gray-100'
+                      : 'text-gray-700 dark:text-gray-100'
                   }`}
                 >
                   {link.label}
@@ -81,14 +80,9 @@ const LandingNavbar = () => {
 
           {/* Elementos derecha - Desktop */}
           <div className="hidden md:flex items-center space-x-4">
-            <ThemeToggle />
             <Link
               to="/login"
-              className={`px-4 py-2 text-sm font-medium rounded-lg border-2 transition-all ${
-                isScrolled
-                  ? 'border-primary-600 text-primary-600 dark:border-primary-500 dark:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20'
-                  : 'border-white text-white hover:bg-white/10'
-              }`}
+              className="px-4 py-2 text-sm font-medium rounded-lg border-2 border-primary-600 text-primary-600 dark:border-primary-500 dark:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all"
             >
               Iniciar Sesión
             </Link>
@@ -102,14 +96,9 @@ const LandingNavbar = () => {
 
           {/* Botón menú móvil */}
           <div className="md:hidden flex items-center space-x-3">
-            <ThemeToggle />
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className={`p-2 rounded-lg transition-colors ${
-                isScrolled
-                  ? 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-                  : 'text-white hover:bg-white/10'
-              }`}
+              className="p-2 rounded-lg transition-colors text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
               aria-label="Toggle menu"
             >
               <svg

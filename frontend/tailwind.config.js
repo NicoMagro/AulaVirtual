@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
+  darkMode: 'media', // Usar preferencias del sistema operativo
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
