@@ -617,7 +617,36 @@ const eliminarConsulta = async (req, res) => {
       });
     }
 
-    // Eliminar la consulta (las respuestas se eliminan en cascada)
+    // Obtener todas las imágenes de la consulta
+    const imagenesConsulta = await db.query(
+      'SELECT nombre_archivo FROM imagenes_consultas WHERE consulta_id = $1',
+      [consulta_id]
+    );
+
+    // Obtener todas las imágenes de las respuestas de la consulta
+    const imagenesRespuestas = await db.query(
+      `SELECT ic.nombre_archivo
+       FROM imagenes_consultas ic
+       JOIN respuestas_consultas rc ON ic.respuesta_id = rc.id
+       WHERE rc.consulta_id = $1`,
+      [consulta_id]
+    );
+
+    // Combinar todas las imágenes a eliminar
+    const todasLasImagenes = [...imagenesConsulta.rows, ...imagenesRespuestas.rows];
+
+    // Eliminar archivos físicos
+    for (const imagen of todasLasImagenes) {
+      const filePath = path.join(__dirname, '../../uploads/consultas', imagen.nombre_archivo);
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        console.error('Error al eliminar archivo físico:', error);
+        // Continuar con la eliminación aunque falle un archivo
+      }
+    }
+
+    // Eliminar la consulta (las respuestas e imágenes se eliminan en cascada)
     await db.query('DELETE FROM consultas WHERE id = $1', [consulta_id]);
 
     res.status(200).json({
@@ -695,7 +724,24 @@ const eliminarRespuesta = async (req, res) => {
       });
     }
 
-    // Eliminar la respuesta
+    // Obtener todas las imágenes asociadas a esta respuesta
+    const imagenes = await db.query(
+      'SELECT nombre_archivo FROM imagenes_consultas WHERE respuesta_id = $1',
+      [respuesta_id]
+    );
+
+    // Eliminar archivos físicos
+    for (const imagen of imagenes.rows) {
+      const filePath = path.join(__dirname, '../../uploads/consultas', imagen.nombre_archivo);
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        console.error('Error al eliminar archivo físico:', error);
+        // Continuar con la eliminación aunque falle un archivo
+      }
+    }
+
+    // Eliminar la respuesta (las imágenes se eliminan en cascada)
     await db.query('DELETE FROM respuestas_consultas WHERE id = $1', [respuesta_id]);
 
     res.status(200).json({

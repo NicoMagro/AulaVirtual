@@ -538,7 +538,36 @@ const eliminarPregunta = async (req, res) => {
       });
     }
 
-    // Eliminar la pregunta (cascade eliminará opciones y respuestas)
+    // Obtener todas las imágenes de la pregunta
+    const imagenesPregunta = await db.query(
+      'SELECT nombre_archivo FROM imagenes_preguntas WHERE pregunta_id = $1',
+      [pregunta_id]
+    );
+
+    // Obtener todas las imágenes de las opciones de la pregunta
+    const imagenesOpciones = await db.query(
+      `SELECT io.nombre_archivo
+       FROM imagenes_opciones io
+       JOIN opciones_pregunta op ON io.opcion_id = op.id
+       WHERE op.pregunta_id = $1`,
+      [pregunta_id]
+    );
+
+    // Combinar todas las imágenes a eliminar
+    const todasLasImagenes = [...imagenesPregunta.rows, ...imagenesOpciones.rows];
+
+    // Eliminar archivos físicos
+    for (const imagen of todasLasImagenes) {
+      const filePath = path.join(__dirname, '../../uploads/evaluaciones', imagen.nombre_archivo);
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        console.error('Error al eliminar archivo físico:', error);
+        // Continuar con la eliminación aunque falle un archivo
+      }
+    }
+
+    // Eliminar la pregunta (cascade eliminará opciones, imágenes y respuestas)
     await db.query('DELETE FROM preguntas_banco WHERE id = $1', [pregunta_id]);
 
     res.status(200).json({

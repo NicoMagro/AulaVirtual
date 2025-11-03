@@ -14,6 +14,8 @@ import {
   ChevronRight,
   User,
   Image,
+  Search,
+  ChevronLeft,
 } from 'lucide-react';
 import consultasService from '../../services/consultasService';
 
@@ -33,6 +35,10 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filtro, setFiltro] = useState('todas'); // todas, publicas, privadas, resueltas, pendientes
+  const [busqueda, setBusqueda] = useState('');
+  const [ordenamiento, setOrdenamiento] = useState('recientes'); // recientes, antiguas, mas_respondidas
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [itemsPorPagina, setItemsPorPagina] = useState(10);
   const [modalCrear, setModalCrear] = useState(false);
   const [modalDetalle, setModalDetalle] = useState(false);
   const [consultaSeleccionada, setConsultaSeleccionada] = useState(null);
@@ -248,14 +254,51 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
     }
   };
 
-  // Filtrar consultas
-  const consultasFiltradas = consultas.filter((consulta) => {
-    if (filtro === 'publicas') return consulta.publica;
-    if (filtro === 'privadas') return !consulta.publica;
-    if (filtro === 'resueltas') return consulta.resuelta;
-    if (filtro === 'pendientes') return !consulta.resuelta;
-    return true; // 'todas'
-  });
+  // Filtrar y ordenar consultas
+  const consultasFiltradas = consultas
+    .filter((consulta) => {
+      // Filtro por categoría
+      let cumpleFiltro = true;
+      if (filtro === 'publicas') cumpleFiltro = consulta.publica;
+      if (filtro === 'privadas') cumpleFiltro = !consulta.publica;
+      if (filtro === 'resueltas') cumpleFiltro = consulta.resuelta;
+      if (filtro === 'pendientes') cumpleFiltro = !consulta.resuelta;
+
+      if (!cumpleFiltro) return false;
+
+      // Filtro por búsqueda de texto
+      if (busqueda.trim()) {
+        const terminoBusqueda = busqueda.toLowerCase();
+        const coincideTitulo = consulta.titulo.toLowerCase().includes(terminoBusqueda);
+        const coincidePregunta = consulta.pregunta.toLowerCase().includes(terminoBusqueda);
+        const coincideAutor = consulta.creado_por_nombre.toLowerCase().includes(terminoBusqueda);
+        return coincideTitulo || coincidePregunta || coincideAutor;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // Ordenamiento
+      if (ordenamiento === 'recientes') {
+        return new Date(b.fecha_creacion) - new Date(a.fecha_creacion);
+      } else if (ordenamiento === 'antiguas') {
+        return new Date(a.fecha_creacion) - new Date(b.fecha_creacion);
+      } else if (ordenamiento === 'mas_respondidas') {
+        return b.cantidad_respuestas - a.cantidad_respuestas;
+      }
+      return 0;
+    });
+
+  // Paginación
+  const totalPaginas = Math.ceil(consultasFiltradas.length / itemsPorPagina);
+  const indiceInicio = (paginaActual - 1) * itemsPorPagina;
+  const indiceFin = indiceInicio + itemsPorPagina;
+  const consultasPaginadas = consultasFiltradas.slice(indiceInicio, indiceFin);
+
+  // Resetear página cuando cambian los filtros
+  useEffect(() => {
+    setPaginaActual(1);
+  }, [filtro, busqueda, ordenamiento]);
 
   if (loading) {
     return (
@@ -280,6 +323,42 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
           <Plus size={18} />
           Nueva Consulta
         </button>
+      </div>
+
+      {/* Barra de búsqueda y ordenamiento */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* Campo de búsqueda */}
+        <div className="flex-1 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search size={18} className="text-gray-400" />
+          </div>
+          <input
+            type="text"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por título, contenido o autor..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-900 text-sm"
+          />
+          {busqueda && (
+            <button
+              onClick={() => setBusqueda('')}
+              className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+            >
+              <X size={18} />
+            </button>
+          )}
+        </div>
+
+        {/* Ordenamiento */}
+        <select
+          value={ordenamiento}
+          onChange={(e) => setOrdenamiento(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-900 text-sm bg-white"
+        >
+          <option value="recientes">Más recientes</option>
+          <option value="antiguas">Más antiguas</option>
+          <option value="mas_respondidas">Más respondidas</option>
+        </select>
       </div>
 
       {/* Filtros */}
@@ -349,6 +428,34 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
         </div>
       )}
 
+      {/* Información de resultados */}
+      {consultasFiltradas.length > 0 && (
+        <div className="flex items-center justify-between text-sm text-gray-600">
+          <div>
+            Mostrando {indiceInicio + 1}-{Math.min(indiceFin, consultasFiltradas.length)} de {consultasFiltradas.length} consultas
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="itemsPorPagina" className="text-sm">
+              Mostrar:
+            </label>
+            <select
+              id="itemsPorPagina"
+              value={itemsPorPagina}
+              onChange={(e) => {
+                setItemsPorPagina(Number(e.target.value));
+                setPaginaActual(1);
+              }}
+              className="px-2 py-1 border border-gray-300 rounded text-sm bg-white text-gray-900"
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+        </div>
+      )}
+
       {/* Lista de consultas */}
       {consultasFiltradas.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
@@ -356,7 +463,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
         </div>
       ) : (
         <div className="space-y-3">
-          {consultasFiltradas.map((consulta) => (
+          {consultasPaginadas.map((consulta) => (
             <div
               key={consulta.id}
               className={`bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${
@@ -446,6 +553,64 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
         </div>
       )}
 
+      {/* Controles de paginación */}
+      {totalPaginas > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <button
+            onClick={() => setPaginaActual(paginaActual - 1)}
+            disabled={paginaActual === 1}
+            className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft size={16} />
+            Anterior
+          </button>
+
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((pagina) => {
+              // Mostrar solo algunas páginas alrededor de la actual
+              if (
+                pagina === 1 ||
+                pagina === totalPaginas ||
+                (pagina >= paginaActual - 1 && pagina <= paginaActual + 1)
+              ) {
+                return (
+                  <button
+                    key={pagina}
+                    onClick={() => setPaginaActual(pagina)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      pagina === paginaActual
+                        ? 'bg-primary-500 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {pagina}
+                  </button>
+                );
+              } else if (
+                pagina === paginaActual - 2 ||
+                pagina === paginaActual + 2
+              ) {
+                return (
+                  <span key={pagina} className="px-2 text-gray-500">
+                    ...
+                  </span>
+                );
+              }
+              return null;
+            })}
+          </div>
+
+          <button
+            onClick={() => setPaginaActual(paginaActual + 1)}
+            disabled={paginaActual === totalPaginas}
+            className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Modal crear consulta */}
       {modalCrear && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -459,7 +624,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                   setNuevaConsulta({ titulo: '', pregunta: '', publica: true });
                   setImagenesConsulta([]);
                 }}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1 hover:bg-gray-100 rounded transition-colors text-gray-600 hover:text-gray-800"
               >
                 <X size={20} />
               </button>
@@ -476,7 +641,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                   type="text"
                   value={nuevaConsulta.titulo}
                   onChange={(e) => setNuevaConsulta({ ...nuevaConsulta, titulo: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-gray-900"
                   placeholder="Título breve de tu consulta..."
                   maxLength="255"
                   required
@@ -491,7 +656,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                 <textarea
                   value={nuevaConsulta.pregunta}
                   onChange={(e) => setNuevaConsulta({ ...nuevaConsulta, pregunta: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-gray-900"
                   rows="6"
                   placeholder="Describe tu consulta en detalle..."
                   required
@@ -641,7 +806,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                   setNuevaRespuesta('');
                   setImagenesRespuesta([]);
                 }}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
+                className="p-1 hover:bg-gray-100 rounded transition-colors text-gray-600 hover:text-gray-800"
               >
                 <X size={20} />
               </button>
@@ -789,7 +954,7 @@ const ConsultasAula = ({ aula_id, esProfesor, usuario }) => {
                   <textarea
                     value={nuevaRespuesta}
                     onChange={(e) => setNuevaRespuesta(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-gray-900"
                     rows="3"
                     placeholder="Escribe tu respuesta..."
                     required

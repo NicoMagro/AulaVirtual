@@ -1159,6 +1159,59 @@ Los profesores pueden configurar:
 - Los estudiantes pueden ver las imágenes durante la evaluación
 - Clic en la imagen abre en nueva pestaña para ver en tamaño completo
 
+## Mejoras Recientes
+
+### Sistema de Consultas Mejorado
+- ✅ **Eliminación automática de archivos físicos**: Los archivos de imágenes se eliminan del servidor cuando se borran consultas, respuestas o evaluaciones
+- ✅ **Búsqueda y filtrado avanzado**:
+  - Campo de búsqueda por título, contenido y autor
+  - Ordenamiento por fecha (recientes/antiguas) y cantidad de respuestas
+  - Botón de limpieza rápida de búsqueda
+- ✅ **Sistema de paginación completo**:
+  - Navegación con botones Anterior/Siguiente
+  - Selector de items por página (5, 10, 20, 50)
+  - Números de página clickeables
+  - Navegación inteligente con puntos suspensivos
+  - Auto-reset al cambiar filtros
+  - Información de resultados (mostrando X-Y de Z)
+
+### Correcciones de UI
+- ✅ **Visibilidad mejorada en modales**: Botones de cierre (X) y campos de texto ahora son claramente visibles con colores adecuados
+
+## Sistema de Notificaciones en Tiempo Real (Próximamente)
+
+### Arquitectura Planificada
+
+**Tecnologías:**
+- Backend: Socket.IO para WebSockets
+- Frontend: socket.io-client + React Context
+- Base de datos: Nueva tabla `notificaciones`
+
+### Reglas de Notificación
+
+**Estudiantes recibirán notificaciones cuando:**
+1. Alguien responde a una consulta que el estudiante creó
+2. Alguien responde a una consulta donde el estudiante ha participado (escribió al menos una respuesta)
+3. NO recibirán notificaciones de consultas públicas donde no están involucrados
+
+**Profesores recibirán notificaciones cuando:**
+1. Se crea una nueva consulta en el aula
+2. Una consulta es marcada como resuelta por un estudiante
+
+**Características Planificadas:**
+- Notificaciones en tiempo real mediante WebSockets
+- Badge con contador de notificaciones no leídas
+- Panel deslizable con historial de notificaciones
+- Persistencia de notificaciones en base de datos
+- Navegación directa al recurso desde la notificación
+- Notificaciones solo para usuarios involucrados (sin spam)
+
+**Eventos WebSocket:**
+- `nueva_consulta` - Nueva consulta creada en el aula
+- `nueva_respuesta` - Respuesta en consulta donde el usuario participa
+- `consulta_resuelta` - Consulta marcada como resuelta
+- `notificacion_leida` - Marcar notificación como leída
+
 ## Autor
 
 Desarrollado por Angel Nicolas Magro

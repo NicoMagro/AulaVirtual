@@ -1,5 +1,7 @@
 const db = require('../config/database');
 const { validationResult } = require('express-validator');
+const path = require('path');
+const fs = require('fs').promises;
 
 /**
  * Crear una nueva evaluación
@@ -475,7 +477,40 @@ const eliminarEvaluacion = async (req, res) => {
       }
     }
 
-    // Eliminar la evaluación (cascade eliminará todo lo relacionado)
+    // Obtener todas las imágenes de las preguntas de esta evaluación
+    const imagenesPreguntas = await db.query(
+      `SELECT ip.nombre_archivo
+       FROM imagenes_preguntas ip
+       JOIN preguntas_banco pb ON ip.pregunta_id = pb.id
+       WHERE pb.evaluacion_id = $1`,
+      [evaluacion_id]
+    );
+
+    // Obtener todas las imágenes de las opciones de las preguntas de esta evaluación
+    const imagenesOpciones = await db.query(
+      `SELECT io.nombre_archivo
+       FROM imagenes_opciones io
+       JOIN opciones_pregunta op ON io.opcion_id = op.id
+       JOIN preguntas_banco pb ON op.pregunta_id = pb.id
+       WHERE pb.evaluacion_id = $1`,
+      [evaluacion_id]
+    );
+
+    // Combinar todas las imágenes a eliminar
+    const todasLasImagenes = [...imagenesPreguntas.rows, ...imagenesOpciones.rows];
+
+    // Eliminar archivos físicos
+    for (const imagen of todasLasImagenes) {
+      const filePath = path.join(__dirname, '../../uploads/evaluaciones', imagen.nombre_archivo);
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        console.error('Error al eliminar archivo físico:', error);
+        // Continuar con la eliminación aunque falle un archivo
+      }
+    }
+
+    // Eliminar la evaluación (cascade eliminará todo lo relacionado: preguntas, opciones, imágenes, intentos, respuestas)
     await db.query('DELETE FROM evaluaciones WHERE id = $1', [evaluacion_id]);
 
     res.status(200).json({
