@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { SocketProvider } from './contexts/SocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import HomeRoute from './components/HomeRoute';
 import Layout from './components/Layout';
@@ -27,7 +28,8 @@ function App() {
     <Router>
       <ThemeProvider>
         <AuthProvider>
-          <Routes>
+          <SocketProvider>
+            <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/login" element={<Login />} />
             <Route path="/registro" element={<Registro />} />
@@ -113,7 +115,8 @@ function App() {
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </SocketProvider>
       </AuthProvider>
     </ThemeProvider>
   </Router>

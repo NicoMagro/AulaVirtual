@@ -4,6 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { v4: uuidv4 } = require('uuid');
+const { crearNotificacion } = require('./notificacionesController');
 
 // Configuración de multer para imágenes
 const storage = multer.diskStorage({
@@ -161,10 +162,38 @@ const crearConsulta = async (req, res) => {
       ]
     );
 
+    const consultaCreada = resultado.rows[0];
+
+    // Notificar a los profesores del aula sobre la nueva consulta
+    try {
+      const profesores = await db.query(
+        `SELECT DISTINCT profesor_id
+         FROM aula_profesores
+         WHERE aula_id = $1 AND activo = true AND profesor_id != $2`,
+        [aula_id, usuario_id]
+      );
+
+      const nombreAula = aulaExiste.rows[0].nombre || 'Aula';
+
+      for (const profesor of profesores.rows) {
+        await crearNotificacion({
+          usuario_id: profesor.profesor_id,
+          tipo: 'nueva_consulta',
+          titulo: 'Nueva consulta',
+          mensaje: `Nueva consulta en ${nombreAula}: ${titulo}`,
+          aula_id: aula_id,
+          consulta_id: consultaCreada.id
+        });
+      }
+    } catch (notifError) {
+      console.error('Error al enviar notificaciones:', notifError);
+      // No fallar la operación si falla la notificación
+    }
+
     res.status(201).json({
       success: true,
       message: 'Consulta creada exitosamente',
-      data: resultado.rows[0],
+      data: consultaCreada,
     });
   } catch (error) {
     console.error('Error al crear consulta:', error);
@@ -481,6 +510,51 @@ const crearRespuesta = async (req, res) => {
       [consulta_id, usuario_id, respuesta]
     );
 
+    // Notificar a usuarios involucrados en la consulta
+    try {
+      // Obtener información del aula para el mensaje
+      const aulaInfo = await db.query(
+        'SELECT nombre FROM aulas WHERE id = $1',
+        [consultaData.aula_id]
+      );
+      const nombreAula = aulaInfo.rows[0]?.nombre || 'Aula';
+
+      // Obtener al creador de la consulta y participantes (usuarios que han respondido)
+      const usuariosInvolucrados = await db.query(
+        `SELECT DISTINCT usuario_id FROM (
+          SELECT creado_por as usuario_id FROM consultas WHERE id = $1
+          UNION
+          SELECT respondido_por as usuario_id FROM respuestas_consultas WHERE consulta_id = $1
+        ) AS involucrados
+        WHERE usuario_id != $2`,
+        [consulta_id, usuario_id]
+      );
+
+      // Obtener información del usuario que responde
+      const usuarioResponde = await db.query(
+        'SELECT nombre, apellido FROM usuarios WHERE id = $1',
+        [usuario_id]
+      );
+      const nombreResponde = usuarioResponde.rows[0]
+        ? `${usuarioResponde.rows[0].nombre} ${usuarioResponde.rows[0].apellido}`
+        : 'Un usuario';
+
+      // Notificar a cada usuario involucrado
+      for (const user of usuariosInvolucrados.rows) {
+        await crearNotificacion({
+          usuario_id: user.usuario_id,
+          tipo: 'nueva_respuesta',
+          titulo: 'Nueva respuesta en consulta',
+          mensaje: `${nombreResponde} respondió en "${consultaData.titulo}"`,
+          aula_id: consultaData.aula_id,
+          consulta_id: consulta_id
+        });
+      }
+    } catch (notifError) {
+      console.error('Error al enviar notificaciones:', notifError);
+      // No fallar la operación si falla la notificación
+    }
+
     res.status(201).json({
       success: true,
       message: 'Respuesta creada exitosamente',
@@ -543,6 +617,39 @@ const marcarComoResuelta = async (req, res) => {
       'UPDATE consultas SET resuelta = $1 WHERE id = $2 RETURNING *',
       [nuevoValor, consulta_id]
     );
+
+    // Notificar a los profesores solo cuando se marca como resuelta (no cuando se desmarca)
+    if (nuevoValor) {
+      try {
+        const profesores = await db.query(
+          `SELECT DISTINCT profesor_id
+           FROM aula_profesores
+           WHERE aula_id = $1 AND activo = true AND profesor_id != $2`,
+          [consultaData.aula_id, usuario_id]
+        );
+
+        // Obtener información del aula
+        const aulaInfo = await db.query(
+          'SELECT nombre FROM aulas WHERE id = $1',
+          [consultaData.aula_id]
+        );
+        const nombreAula = aulaInfo.rows[0]?.nombre || 'Aula';
+
+        for (const profesor of profesores.rows) {
+          await crearNotificacion({
+            usuario_id: profesor.profesor_id,
+            tipo: 'consulta_resuelta',
+            titulo: 'Consulta resuelta',
+            mensaje: `Consulta resuelta en ${nombreAula}: "${consultaData.titulo}"`,
+            aula_id: consultaData.aula_id,
+            consulta_id: consulta_id
+          });
+        }
+      } catch (notifError) {
+        console.error('Error al enviar notificaciones:', notifError);
+        // No fallar la operación si falla la notificación
+      }
+    }
 
     res.status(200).json({
       success: true,

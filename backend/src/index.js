@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 require('dotenv').config();
 
 const db = require('./config/database');
@@ -15,9 +17,23 @@ const consultasRoutes = require('./routes/consultasRoutes');
 const evaluacionesRoutes = require('./routes/evaluacionesRoutes');
 const preguntasRoutes = require('./routes/preguntasRoutes');
 const intentosRoutes = require('./routes/intentosRoutes');
+const notificacionesRoutes = require('./routes/notificacionesRoutes');
+const socketHandler = require('./socket/socketHandler');
 
 const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
+
 const PORT = process.env.PORT || 5000;
+
+// Hacer io accesible globalmente
+global.io = io;
 
 // ============================================
 // Middlewares
@@ -81,6 +97,9 @@ app.use('/api/preguntas', preguntasRoutes);
 // Rutas de intentos
 app.use('/api/intentos', intentosRoutes);
 
+// Rutas de notificaciones
+app.use('/api/notificaciones', notificacionesRoutes);
+
 // ============================================
 // Manejo de errores 404
 // ============================================
@@ -104,6 +123,11 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================
+// Configurar WebSocket
+// ============================================
+socketHandler(io);
+
+// ============================================
 // Iniciar servidor
 // ============================================
 const startServer = async () => {
@@ -116,12 +140,13 @@ const startServer = async () => {
       process.exit(1);
     }
 
-    // Iniciar servidor
-    app.listen(PORT, () => {
+    // Iniciar servidor con Socket.IO
+    server.listen(PORT, () => {
       console.log('===========================================');
       console.log(`✓ Servidor corriendo en puerto ${PORT}`);
       console.log(`✓ Ambiente: ${process.env.NODE_ENV}`);
       console.log(`✓ URL: http://localhost:${PORT}`);
+      console.log(`✓ WebSocket habilitado`);
       console.log('===========================================');
     });
 

@@ -609,6 +609,32 @@ CREATE TABLE imagenes_opciones (
 );
 
 -- ============================================
+-- Tabla: notificaciones
+-- Almacena las notificaciones en tiempo real del sistema
+-- ============================================
+CREATE TABLE notificaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    usuario_id UUID NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    tipo VARCHAR(50) NOT NULL,
+    titulo VARCHAR(255) NOT NULL,
+    mensaje TEXT NOT NULL,
+    aula_id UUID REFERENCES aulas(id) ON DELETE CASCADE,
+    consulta_id UUID REFERENCES consultas(id) ON DELETE CASCADE,
+    leida BOOLEAN DEFAULT FALSE,
+    fecha_creacion TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    fecha_lectura TIMESTAMP WITH TIME ZONE
+);
+
+-- ============================================
+-- Índices para notificaciones
+-- ============================================
+CREATE INDEX idx_notificaciones_usuario ON notificaciones(usuario_id);
+CREATE INDEX idx_notificaciones_leida ON notificaciones(leida);
+CREATE INDEX idx_notificaciones_aula ON notificaciones(aula_id);
+CREATE INDEX idx_notificaciones_consulta ON notificaciones(consulta_id);
+CREATE INDEX idx_notificaciones_fecha ON notificaciones(fecha_creacion DESC);
+
+-- ============================================
 -- Índices para evaluaciones
 -- ============================================
 CREATE INDEX idx_evaluaciones_aula ON evaluaciones(aula_id);
@@ -688,6 +714,16 @@ CREATE TRIGGER trigger_actualizar_evaluaciones
     EXECUTE FUNCTION actualizar_fecha_actualizacion();
 
 -- ============================================
+-- Comentarios para notificaciones
+-- ============================================
+COMMENT ON TABLE notificaciones IS 'Almacena las notificaciones en tiempo real del sistema';
+COMMENT ON COLUMN notificaciones.tipo IS 'Tipo de notificación: nueva_consulta, nueva_respuesta, consulta_resuelta';
+COMMENT ON COLUMN notificaciones.usuario_id IS 'Usuario que recibirá la notificación';
+COMMENT ON COLUMN notificaciones.aula_id IS 'Aula relacionada con la notificación (opcional)';
+COMMENT ON COLUMN notificaciones.consulta_id IS 'Consulta relacionada con la notificación (opcional)';
+COMMENT ON COLUMN notificaciones.leida IS 'Indica si la notificación fue leída por el usuario';
+
+-- ============================================
 -- Comentarios para tablas de evaluaciones
 -- ============================================
 COMMENT ON TABLE evaluaciones IS 'Evaluaciones/exámenes de un aula';
@@ -750,6 +786,7 @@ BEGIN
     RAISE NOTICE 'Tablas básicas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes';
     RAISE NOTICE 'Tablas de contenido: hojas_aula, contenido_aulas, archivos_aula';
     RAISE NOTICE 'Tablas de consultas: consultas, respuestas_consultas, imagenes_consultas';
+    RAISE NOTICE 'Tablas de notificaciones: notificaciones';
     RAISE NOTICE 'Tablas de evaluaciones: evaluaciones, preguntas_banco, opciones_pregunta, respuestas_correctas_vf, intentos_evaluacion, preguntas_intento, respuestas_estudiante, opciones_seleccionadas_estudiante, imagenes_respuestas, imagenes_preguntas, imagenes_opciones';
     RAISE NOTICE 'Roles insertados: admin, profesor, estudiante';
     RAISE NOTICE '===========================================';

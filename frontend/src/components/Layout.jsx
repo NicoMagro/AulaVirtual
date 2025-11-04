@@ -1,6 +1,7 @@
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { LogOut, School, BookOpen, Users, Home, RefreshCw, Shield } from 'lucide-react';
+import NotificacionesMenu from './NotificacionesMenu';
 
 const Layout = ({ children }) => {
   const { user, rolActivo, tieneMultiplesRoles, cambiarRol, logout } = useAuth();
@@ -105,6 +106,9 @@ const Layout = ({ children }) => {
                   </div>
                 </div>
               )}
+
+              {/* Menú de notificaciones */}
+              <NotificacionesMenu />
 
               {/* Información del usuario */}
               <div className="hidden sm:block text-right">

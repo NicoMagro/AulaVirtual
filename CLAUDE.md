@@ -76,13 +76,16 @@ backend/src/
 │   ├── evaluacionesController.js
 │   ├── preguntasController.js  # Banco de preguntas
 │   ├── intentosController.js   # Intentos de evaluación
+│   ├── notificacionesController.js  # Notificaciones en tiempo real
 │   └── usuariosController.js   # Gestión de usuarios (admin)
 ├── middlewares/
 │   └── auth.js              # autenticar() y autorizarRoles()
 ├── routes/                  # Definición de endpoints
+├── socket/                  # WebSocket con Socket.IO
+│   └── socketHandler.js    # Gestión de conexiones y eventos
 ├── utils/
 │   └── jwt.js              # generateToken() y verifyToken()
-└── index.js                # Entry point
+└── index.js                # Entry point (incluye config de Socket.IO)
 ```
 
 **Patrón de arquitectura**: Cada módulo sigue el patrón Routes → Middleware → Controller → Database
@@ -112,10 +115,12 @@ frontend/src/
 │   │   ├── RealizarEvaluacion.jsx
 │   │   ├── CalificarIntento.jsx
 │   │   └── EstadisticasEvaluacion.jsx  # Con exportación Excel/PDF
+│   ├── NotificacionesMenu.jsx  # Menú de notificaciones con badge
 │   ├── Layout.jsx
 │   └── ProtectedRoute.jsx
 ├── contexts/
 │   ├── AuthContext.jsx     # Gestión de autenticación y rol activo
+│   ├── SocketContext.jsx   # Gestión de WebSocket y notificaciones
 │   └── ThemeContext.jsx
 ├── pages/
 │   ├── LandingPage.jsx     # Página pública con parallax y modo oscuro automático
@@ -132,6 +137,7 @@ frontend/src/
 │       └── MisAulas.jsx
 └── services/               # Wrappers de Axios para API calls
     ├── api.js              # Cliente Axios base con interceptores
+    ├── notificacionesService.js  # Servicio de notificaciones
     └── *Service.js         # Un servicio por controlador
 ```
 
@@ -177,6 +183,9 @@ frontend/src/
 - `preguntas_intento`: id (uuid), intento_id, pregunta_id, enunciado (snapshot), tipo_pregunta, puntaje_maximo, respuesta_correcta, opciones (jsonb snapshot), orden
 - `respuestas_estudiante`: id (uuid), intento_id, pregunta_id, respuesta_texto, opcion_seleccionada_id, respuesta_booleana, justificacion, es_correcta, puntaje_obtenido, retroalimentacion_profesor, calificado_por
 - `opciones_seleccionadas_estudiante`: id (uuid), respuesta_id, opcion_id - Para múltiples selecciones
+
+**Notificaciones**
+- `notificaciones`: id (uuid), usuario_id, tipo, titulo, mensaje, aula_id, consulta_id, leida, fecha_creacion, fecha_lectura
 
 ### Índices y Optimizaciones
 
@@ -364,8 +373,80 @@ El middleware `autenticar` inyecta `req.usuario` con: `{ id, email, roles }`
 - **Profesor**: profesor1@aulavirtual.com / profesor123
 - **Estudiante**: estudiante1@aulavirtual.com / estudiante123
 
+## Sistema de Notificaciones en Tiempo Real
+
+El proyecto cuenta con un sistema completo de notificaciones implementado con WebSocket/Socket.IO:
+
+### Arquitectura
+
+**Backend:**
+- Socket.IO configurado en `backend/src/index.js`
+- Handler en `backend/src/socket/socketHandler.js`
+- Controller en `backend/src/controllers/notificacionesController.js`
+- Rutas API en `backend/src/routes/notificacionesRoutes.js`
+
+**Frontend:**
+- Context en `frontend/src/contexts/SocketContext.jsx`
+- Componente UI en `frontend/src/components/NotificacionesMenu.jsx`
+- Servicio en `frontend/src/services/notificacionesService.js`
+
+**Base de Datos:**
+- Tabla `notificaciones` con campos: id, usuario_id, tipo, titulo, mensaje, aula_id, consulta_id, leida, fecha_creacion, fecha_lectura
+- Índices en usuario_id, leida, aula_id, consulta_id, fecha_creacion
+
+### Flujo de Notificaciones
+
+**Conexión:**
+1. Usuario inicia sesión → Frontend crea conexión Socket.IO
+2. Frontend envía evento `authenticate` con token JWT
+3. Backend verifica token y almacena usuario conectado en Map
+4. Frontend carga historial de notificaciones desde API REST
+
+**Envío de Notificaciones:**
+1. Ocurre un evento (nueva consulta, respuesta, etc.)
+2. Backend llama `crearNotificacion()` que:
+   - Inserta en BD (tabla `notificaciones`)
+   - Emite evento WebSocket `nueva_notificacion` si el usuario está conectado
+3. Frontend recibe evento y:
+   - Agrega notificación al estado
+   - Incrementa contador badge
+   - Muestra notificación del navegador (si hay permiso)
+
+**Tipos de Notificaciones:**
+- `nueva_consulta`: Para profesores cuando se crea una consulta
+- `nueva_respuesta`: Para usuarios involucrados en una consulta
+- `consulta_resuelta`: Para profesores cuando se marca como resuelta
+
+### Integración con Consultas
+
+En `backend/src/controllers/consultasController.js`:
+- Al crear consulta → notifica a todos los profesores del aula
+- Al crear respuesta → notifica al creador de la consulta y a todos los que participaron
+- Al marcar resuelta → notifica a todos los profesores del aula
+
+### API Endpoints
+
+- `GET /api/notificaciones` - Obtener notificaciones (con filtros)
+- `PUT /api/notificaciones/:id/leida` - Marcar como leída
+- `PUT /api/notificaciones/marcar-todas-leidas` - Marcar todas
+- `DELETE /api/notificaciones/:id` - Eliminar notificación
+
+### Uso en Frontend
+
+```jsx
+import { useSocket } from '../contexts/SocketContext';
+
+function MyComponent() {
+  const {
+    notificaciones,
+    notificacionesNoLeidas,
+    marcarComoLeida
+  } = useSocket();
+
+  // El componente tiene acceso a todas las notificaciones
+}
+```
+
 ## Known Issues / Limitations
 
-- No hay paginación en listados largos (pendiente optimización)
-- No hay sistema de notificaciones en tiempo real (pendiente WebSockets)
-- Las consultas no tienen sistema de búsqueda/filtrado avanzado
+- No hay paginación en listados largos de evaluaciones e intentos (pendiente optimización)

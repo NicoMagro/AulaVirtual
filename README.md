@@ -11,6 +11,7 @@ graph TB
         B[Pages]
         C[Services/API]
         D[Context/Auth]
+        WS[SocketContext]
     end
 
     subgraph "Backend - Node.js/Express"
@@ -18,6 +19,7 @@ graph TB
         F[Controllers]
         G[Middlewares]
         H[Utils]
+        SOCK[Socket.IO Handler]
     end
 
     subgraph "Base de Datos - PostgreSQL"
@@ -41,12 +43,14 @@ graph TB
         Z[(opciones_seleccionadas_estudiante)]
         AA[(imagenes_preguntas)]
         AB[(imagenes_opciones)]
+        AC[(notificaciones)]
     end
 
     A --> C
     B --> C
     C --> |HTTP/REST| E
     D --> |JWT Token| E
+    WS <--> |WebSocket| SOCK
     E --> G
     G --> F
     F --> I
@@ -69,7 +73,9 @@ graph TB
     F --> Z
     F --> AA
     F --> AB
+    F --> AC
     H -.-> G
+    SOCK --> AC
 ```
 
 ## Modelo de Datos
@@ -92,6 +98,7 @@ erDiagram
     usuarios ||--o{ respuestas_estudiante : responde
     usuarios ||--o{ imagenes_preguntas : sube
     usuarios ||--o{ imagenes_opciones : sube
+    usuarios ||--o{ notificaciones : recibe
 
     aulas ||--o{ aula_profesores : tiene
     aulas ||--o{ aula_estudiantes : tiene
@@ -128,6 +135,9 @@ erDiagram
     preguntas_intento ||--o{ respuestas_estudiante : recibe
 
     respuestas_estudiante ||--o{ opciones_seleccionadas_estudiante : tiene
+
+    aulas ||--o{ notificaciones : referencia
+    consultas ||--o{ notificaciones : referencia
 
     usuarios {
         uuid id PK
@@ -276,6 +286,19 @@ erDiagram
         uuid subido_por FK
         timestamp fecha_subida
     }
+
+    notificaciones {
+        uuid id PK
+        uuid usuario_id FK
+        varchar tipo
+        varchar titulo
+        text mensaje
+        uuid aula_id FK
+        uuid consulta_id FK
+        boolean leida
+        timestamp fecha_creacion
+        timestamp fecha_lectura
+    }
 ```
 
 ## Flujo de Autenticación
@@ -358,6 +381,60 @@ sequenceDiagram
     S-->>P: Descargar archivo
 ```
 
+## Flujo de Notificaciones en Tiempo Real
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant F as Frontend
+    participant WS as WebSocket
+    participant B as Backend
+    participant DB as Database
+
+    Note over U,DB: Fase 1: Conexión WebSocket
+    U->>F: Login exitoso
+    F->>F: Guardar token en localStorage
+    F->>WS: Conectar Socket.IO
+    WS->>B: Solicitar conexión
+    B-->>WS: Conexión establecida
+    F->>WS: Autenticar (token JWT)
+    WS->>B: Verificar token
+    B->>B: Almacenar usuario conectado
+    B-->>WS: Autenticación exitosa
+    F->>DB: Cargar notificaciones históricas
+    DB-->>F: Notificaciones previas
+
+    Note over U,DB: Fase 2: Nueva Consulta
+    U->>F: Crear consulta en aula
+    F->>B: POST /api/consultas
+    B->>DB: INSERT consulta
+    B->>DB: SELECT profesores del aula
+    loop Para cada profesor
+        B->>DB: INSERT notificación
+        B->>WS: Enviar evento 'nueva_notificacion'
+        WS-->>F: Notificación en tiempo real
+        F->>F: Mostrar badge + notificación navegador
+    end
+
+    Note over U,DB: Fase 3: Nueva Respuesta
+    U->>F: Responder consulta
+    F->>B: POST /api/consultas/:id/respuestas
+    B->>DB: INSERT respuesta
+    B->>DB: SELECT usuarios involucrados
+    loop Para cada usuario involucrado
+        B->>DB: INSERT notificación
+        B->>WS: Enviar evento 'nueva_notificacion'
+        WS-->>F: Notificación en tiempo real
+    end
+
+    Note over U,DB: Fase 4: Interacción con Notificaciones
+    U->>F: Click en notificación
+    F->>B: PUT /api/notificaciones/:id/leida
+    B->>DB: UPDATE notificación (leida = true)
+    F->>F: Navegar al aula/consulta
+    F->>F: Actualizar contador badge
+```
+
 ## Roles y Permisos
 
 ```mermaid
@@ -422,6 +499,7 @@ graph TB
 ### Backend
 - Node.js + Express
 - PostgreSQL
+- Socket.IO (WebSocket para notificaciones en tiempo real)
 - JWT (autenticación)
 - bcrypt (encriptación de contraseñas)
 - express-validator (validaciones)
@@ -436,6 +514,7 @@ graph TB
 - Vite
 - React Router DOM v7
 - Axios
+- Socket.IO Client (WebSocket para notificaciones en tiempo real)
 - Tailwind CSS v3
 - Lucide React (iconos)
 - @dnd-kit (drag and drop)
@@ -491,6 +570,7 @@ AulaVirtual/
 │   │   │   ├── hojasController.js
 │   │   │   ├── intentosController.js
 │   │   │   ├── matriculacionController.js
+│   │   │   ├── notificacionesController.js
 │   │   │   ├── preguntasController.js
 │   │   │   └── usuariosController.js
 │   │   ├── middlewares/      # Middleware de autenticación y autorización
@@ -505,8 +585,11 @@ AulaVirtual/
 │   │   │   ├── hojasRoutes.js
 │   │   │   ├── intentosRoutes.js
 │   │   │   ├── matriculacionRoutes.js
+│   │   │   ├── notificacionesRoutes.js
 │   │   │   ├── preguntasRoutes.js
 │   │   │   └── usuariosRoutes.js
+│   │   ├── socket/           # Manejo de WebSocket
+│   │   │   └── socketHandler.js
 │   │   ├── utils/            # Utilidades (JWT, etc.)
 │   │   │   └── jwt.js
 │   │   └── index.js          # Punto de entrada del servidor
@@ -530,6 +613,7 @@ AulaVirtual/
 │   │   │   │   ├── TabsHojas.jsx
 │   │   │   │   ├── ModalGestionarHojas.jsx
 │   │   │   │   └── ListaArchivos.jsx
+│   │   │   ├── NotificacionesMenu.jsx  # Menú de notificaciones en tiempo real
 │   │   │   ├── evaluaciones/ # Componentes de evaluaciones
 │   │   │   │   ├── EvaluacionesAula.jsx
 │   │   │   │   ├── ModalCrearEvaluacion.jsx
@@ -546,6 +630,7 @@ AulaVirtual/
 │   │   │   └── ThemeToggle.jsx (no usado actualmente)
 │   │   ├── contexts/         # Context API
 │   │   │   ├── AuthContext.jsx
+│   │   │   ├── SocketContext.jsx
 │   │   │   └── ThemeContext.jsx
 │   │   ├── pages/            # Páginas de la aplicación
 │   │   │   ├── LandingPage.jsx # Landing page pública
@@ -571,6 +656,7 @@ AulaVirtual/
 │   │   │   ├── evaluacionesService.js
 │   │   │   ├── hojasService.js
 │   │   │   ├── matriculacionService.js
+│   │   │   ├── notificacionesService.js
 │   │   │   └── usuariosService.js
 │   │   └── App.jsx
 │   └── package.json
@@ -602,7 +688,7 @@ psql -U tu_usuario -d AulaVirtual -f context/usuarios_prueba.sql
 ```
 
 El script `init.sql` crea:
-- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas, evaluaciones, preguntas_banco, opciones_pregunta, intentos_evaluacion, preguntas_intento, respuestas_estudiante, opciones_seleccionadas_estudiante, imagenes_preguntas, imagenes_opciones
+- Tablas: usuarios, roles, usuario_roles, aulas, aula_profesores, aula_estudiantes, hojas_aula, contenido_aulas, archivos_aula, consultas, respuestas_consultas, imagenes_consultas, evaluaciones, preguntas_banco, opciones_pregunta, intentos_evaluacion, preguntas_intento, respuestas_estudiante, opciones_seleccionadas_estudiante, imagenes_preguntas, imagenes_opciones, notificaciones
 - Roles por defecto: admin, profesor, estudiante
 - Índices para optimización
 - Triggers para actualización automática de fechas
@@ -614,6 +700,7 @@ El script `init.sql` crea:
 - Soporte para múltiples opciones seleccionadas en preguntas de múltiple choice
 - Sistema de puntaje proporcional automático
 - Soporte de imágenes en preguntas y opciones de respuesta (hasta 10 MB por imagen)
+- Sistema de notificaciones en tiempo real con WebSocket
 
 ### Usuarios de Prueba
 
@@ -779,6 +866,19 @@ npm run preview
 - ✅ Ver mis notas y resultados con puntaje proporcional
 - ✅ Ver respuestas correctas (si el profesor lo permite)
 - ✅ Realizar múltiples intentos (según configuración)
+- ✅ Recibir notificaciones en tiempo real de respuestas en sus consultas
+
+### Notificaciones en Tiempo Real
+- ✅ Sistema de notificaciones con WebSocket (Socket.IO)
+- ✅ Badge con contador de notificaciones no leídas
+- ✅ Menú desplegable con historial de notificaciones
+- ✅ Notificaciones del navegador (Browser Notifications API)
+- ✅ Persistencia en base de datos
+- ✅ Navegación directa al contenido desde notificación
+- ✅ Marcar como leída individual o todas
+- ✅ Eliminar notificaciones
+- ✅ Notificaciones inteligentes (solo usuarios involucrados)
+- ✅ Reconexión automática de WebSocket
 
 ### Seguridad
 - Contraseñas encriptadas con bcrypt
@@ -1178,39 +1278,168 @@ Los profesores pueden configurar:
 ### Correcciones de UI
 - ✅ **Visibilidad mejorada en modales**: Botones de cierre (X) y campos de texto ahora son claramente visibles con colores adecuados
 
-## Sistema de Notificaciones en Tiempo Real (Próximamente)
+## Sistema de Notificaciones en Tiempo Real
 
-### Arquitectura Planificada
+### Arquitectura Implementada
 
 **Tecnologías:**
-- Backend: Socket.IO para WebSockets
-- Frontend: socket.io-client + React Context
-- Base de datos: Nueva tabla `notificaciones`
+- Backend: Socket.IO (WebSocket sobre HTTP)
+- Frontend: socket.io-client + React Context (SocketContext)
+- Base de datos: Tabla `notificaciones` con persistencia completa
+- Autenticación: JWT para autenticar conexiones WebSocket
+
+### Características Implementadas
+
+**Conexión y Autenticación:**
+- Conexión WebSocket automática al iniciar sesión
+- Autenticación mediante token JWT
+- Reconexión automática con reintentos exponenciales
+- Gestión de usuarios conectados en servidor
+
+**Notificaciones en Tiempo Real:**
+- Badge con contador de notificaciones no leídas en el navbar
+- Menú desplegable con historial de notificaciones
+- Notificaciones del navegador (Browser Notifications API)
+- Persistencia completa en base de datos
+- Navegación directa al aula/consulta desde la notificación
+
+**Gestión de Notificaciones:**
+- Marcar individual como leída
+- Marcar todas como leídas
+- Eliminar notificaciones
+- Filtrado por estado (leídas/no leídas)
+- Ordenamiento por fecha
+- Formato de tiempo relativo (hace 5 min, hace 2h, etc.)
 
 ### Reglas de Notificación
 
-**Estudiantes recibirán notificaciones cuando:**
+**Estudiantes reciben notificaciones cuando:**
 1. Alguien responde a una consulta que el estudiante creó
 2. Alguien responde a una consulta donde el estudiante ha participado (escribió al menos una respuesta)
-3. NO recibirán notificaciones de consultas públicas donde no están involucrados
+3. NO reciben notificaciones de consultas públicas donde no están involucrados
 
-**Profesores recibirán notificaciones cuando:**
-1. Se crea una nueva consulta en el aula
+**Profesores reciben notificaciones cuando:**
+1. Se crea una nueva consulta en el aula (pública o privada)
 2. Una consulta es marcada como resuelta por un estudiante
 
-**Características Planificadas:**
-- Notificaciones en tiempo real mediante WebSockets
-- Badge con contador de notificaciones no leídas
-- Panel deslizable con historial de notificaciones
-- Persistencia de notificaciones en base de datos
-- Navegación directa al recurso desde la notificación
-- Notificaciones solo para usuarios involucrados (sin spam)
+**Tipos de Notificaciones:**
+- `nueva_consulta` - Nueva consulta creada en el aula (color azul)
+- `nueva_respuesta` - Respuesta en consulta donde el usuario participa (color verde)
+- `consulta_resuelta` - Consulta marcada como resuelta (color morado)
 
-**Eventos WebSocket:**
-- `nueva_consulta` - Nueva consulta creada en el aula
-- `nueva_respuesta` - Respuesta en consulta donde el usuario participa
-- `consulta_resuelta` - Consulta marcada como resuelta
-- `notificacion_leida` - Marcar notificación como leída
+### Eventos WebSocket
+
+**Cliente → Servidor:**
+- `authenticate` - Autenticar usuario con token JWT
+- `marcar_leida` - Marcar notificación como leída
+
+**Servidor → Cliente:**
+- `authenticated` - Confirmación de autenticación exitosa
+- `authentication_error` - Error en la autenticación
+- `nueva_notificacion` - Nueva notificación para el usuario
+- `notificacion_marcada` - Confirmación de notificación marcada
+
+### API Endpoints de Notificaciones
+
+**GET** `/api/notificaciones`
+- Obtener notificaciones del usuario autenticado
+- Acceso: Todos los usuarios autenticados
+- Query params: `limit`, `offset`, `solo_no_leidas`
+- Respuesta: Lista de notificaciones + contador de no leídas
+
+**PUT** `/api/notificaciones/:notificacion_id/leida`
+- Marcar una notificación como leída
+- Acceso: Usuario propietario de la notificación
+- Actualiza `leida = true` y `fecha_lectura`
+
+**PUT** `/api/notificaciones/marcar-todas-leidas`
+- Marcar todas las notificaciones del usuario como leídas
+- Acceso: Todos los usuarios autenticados
+
+**DELETE** `/api/notificaciones/:notificacion_id`
+- Eliminar una notificación
+- Acceso: Usuario propietario de la notificación
+
+### Integración con Sistema de Consultas
+
+El sistema de notificaciones está integrado con el módulo de consultas:
+
+**En `consultasController.js`:**
+```javascript
+// Al crear una consulta
+await crearNotificacion({
+  usuario_id: profesor_id,
+  tipo: 'nueva_consulta',
+  titulo: 'Nueva consulta',
+  mensaje: `Nueva consulta en ${nombreAula}: ${titulo}`,
+  aula_id: aula_id,
+  consulta_id: consulta_id
+});
+
+// Al crear una respuesta
+await crearNotificacion({
+  usuario_id: usuario_involucrado_id,
+  tipo: 'nueva_respuesta',
+  titulo: 'Nueva respuesta en consulta',
+  mensaje: `${nombreResponde} respondió en "${consultaTitulo}"`,
+  aula_id: aula_id,
+  consulta_id: consulta_id
+});
+
+// Al marcar como resuelta
+await crearNotificacion({
+  usuario_id: profesor_id,
+  tipo: 'consulta_resuelta',
+  titulo: 'Consulta resuelta',
+  mensaje: `Consulta resuelta en ${nombreAula}: "${consultaTitulo}"`,
+  aula_id: aula_id,
+  consulta_id: consulta_id
+});
+```
+
+### Componentes Frontend
+
+**SocketContext (`frontend/src/contexts/SocketContext.jsx`):**
+- Provider global para gestión de WebSocket
+- Hook `useSocket()` para acceder a notificaciones y funciones
+- Manejo de estados: `connected`, `notificaciones`, `notificacionesNoLeidas`
+- Funciones: `cargarNotificaciones()`, `marcarComoLeida()`, `marcarTodasComoLeidas()`, `eliminarNotificacion()`
+
+**NotificacionesMenu (`frontend/src/components/NotificacionesMenu.jsx`):**
+- Botón con icono de campana y badge con contador
+- Menú desplegable con lista de notificaciones
+- Botón "Marcar todas como leídas"
+- Indicadores visuales (color de fondo para no leídas)
+- Navegación al hacer clic en notificación
+- Formato de fecha relativo
+
+**Integración en Layout:**
+```jsx
+import { SocketProvider } from './contexts/SocketContext';
+import NotificacionesMenu from './components/NotificacionesMenu';
+
+<SocketProvider>
+  <App>
+    <Layout>
+      <NotificacionesMenu />
+    </Layout>
+  </App>
+</SocketProvider>
+```
+
+### Ventajas del Sistema
+
+**Para Usuarios:**
+- Reciben notificaciones instantáneas sin recargar la página
+- No pierden información cuando no están conectados (persistencia)
+- Pueden navegar directamente al contenido relevante
+- Notificaciones del navegador incluso con la pestaña en segundo plano
+
+**Para el Sistema:**
+- Escalable: Solo notifica a usuarios involucrados
+- Eficiente: WebSocket mantiene una sola conexión bidireccional
+- Robusto: Reconexión automática en caso de desconexión
+- Seguro: Autenticación JWT para conexiones WebSocket
 
 ## Autor
 
